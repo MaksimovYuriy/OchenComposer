@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "module": "none",
+    "outFile": "code.js",
     "target": "es2020",
     "lib": ["es2020"],
     "strict": true,
@@ -7,5 +9,6 @@
       "./node_modules/@types",
       "./node_modules/@figma"
     ]
-  }
+  },
+  "files": ["core.ts", "generated/assets.ts", "code.ts"]
 }

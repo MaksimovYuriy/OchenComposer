@@ -27,6 +27,12 @@ module.exports = tseslint.config(
     },
   },
   {
-    ignores: ['code.js', 'dist', 'eslint.config.js'],
+    files: ['core.ts'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^(_|resolveNames$|layoutObjects$)' }],
+    },
+  },
+  {
+    ignores: ['code.js', 'generated/**', 'scripts/**', 'tests/**', 'dist', 'eslint.config.js'],
   },
 )

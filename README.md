@@ -1,40 +1,58 @@
-Below are the steps to get your plugin running. You can also find instructions at:
+﻿# Ochen Composer
 
-  https://www.figma.com/plugin-docs/plugin-quickstart-guide/
+Плагин Figma Design собирает векторные композиции из фиксированной библиотеки
+предоставленных SVG. Полный порядок разработки — в DEVELOPMENT_PLAN.md.
+AI разрешён для смыслового подбора, но не является обязательной архитектурой.
 
-This plugin template uses Typescript and NPM, two standard tools in creating JavaScript applications.
+## Что уже работает в коде
 
-First, download Node.js which comes with NPM. This will allow you to install TypeScript and other
-libraries. You can find the download link here:
+- Ввод названий через запятую, точку с запятой или перенос строки.
+- Каталог из 10 предметов, варианты L/S; повторы добавляют экземпляры.
+- Проверка неизвестных названий до создания результата.
+- Простая автоматическая раскладка до 8 предметов в трёх форматах.
+- Новый фрейм с отдельным именованным контейнером для каждого предмета.
 
-  https://nodejs.org/en/download/
+Это первая техническая версия. Художественные шаблоны по примерам, фоновые
+элементы, палитры, экспорт из панели и подбор по метафоре ещё впереди.
+Импорт и внешний вид в реальной Figma требуют ручной проверки.
 
-Next, install TypeScript using the command:
+## Сборка и запуск
 
-  npm install -g typescript
+1. Установите Node.js 22+ и выполните `npm ci`.
+2. Выполните `npm run build`. Скрипт упакует SVG в `generated/assets.ts`
+   и скомпилирует TypeScript в `code.js` рядом с manifest.json.
+3. В Figma Desktop: Plugins → Development → Import plugin from manifest.
+   Выберите manifest.json этого проекта и запустите OchenComposer.
+4. Откройте любой редактируемый документ Figma. Исходный файл библиотеки
+   и доступ к аккаунту владельца не нужны.
 
-Finally, in the directory of your plugin, get the latest type definitions for the plugin API by running:
+`npm run watch` следит за предметными SVG, исходниками и скриптом сборки.
+Правки ui.html подхватываются при повторном запуске плагина.
+`npm run lint` проверяет исходники; `npm test` проверяет поиск и раскладку.
+Сеть и API-ключи не используются. Сборку всегда запускайте до импорта плагина.
 
-  npm install --save-dev @figma/plugin-typings
+## Проверка первой версии в Figma
 
-If you are familiar with JavaScript, TypeScript will look very familiar. In fact, valid JavaScript code
-is already valid Typescript code.
+1. Введите «Книга, телефон, монета» и нажмите «Собрать композицию».
+   Должен появиться фрейм с тремя отдельно редактируемыми предметами.
+2. Переместите предмет и соберите ещё раз: старый результат должен сохраниться.
+3. Проверьте «кошелёк; смартфон» и повтор «книга, книга».
+4. Введите «книга, ракета»: появится ошибка, частичного фрейма быть не должно.
+5. Проверьте L и S, каждый формат, один предмет и восемь предметов.
+6. Сравните внешний вид с SVG, особенно контуры, маски и пропорции.
+7. Для предварительной проверки SVG используйте стандартный Export в Figma.
+   Кнопка скачивания из панели будет добавлена на этапе экспорта.
 
-TypeScript adds type annotations to variables. This allows code editors such as Visual Studio Code
-to provide information about the Figma API while you are writing code, as well as help catch bugs
-you previously didn't notice.
+## Структура
 
-For more information, visit https://www.typescriptlang.org/
+- assets/ — исходные предметы, палитры, фоны и примеры.
+- core.ts — чистый поиск названий и расчёт координат.
+- code.ts — сообщения UI, импорт SVG и создание фрейма Figma.
+- ui.html — панель плагина.
+- scripts/build.mjs — упаковка библиотеки и запуск TypeScript.
+- generated/ и code.js — результаты сборки, не редактируются вручную.
+- tests/ — автоматические проверки.
 
-Using TypeScript requires a compiler to convert TypeScript (code.ts) into JavaScript (code.js)
-for the browser to run.
-
-We recommend writing TypeScript code using Visual Studio code:
-
-1. Download Visual Studio Code if you haven't already: https://code.visualstudio.com/.
-2. Open this directory in Visual Studio Code.
-3. Compile TypeScript to JavaScript: Run the "Terminal > Run Build Task..." menu item,
-    then select "npm: watch". You will have to do this again every time
-    you reopen Visual Studio Code.
-
-That's it! Visual Studio Code will regenerate the JavaScript file every time you save.
+Оригинальные SVG не меняются при сборке. Вставка создаёт копии; пути в каталоге
+служат для происхождения ассетов, а не для чтения диска из Figma.
+Публичная публикация предоставленной библиотеки отдельно не согласована.

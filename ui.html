@@ -1,17 +1,29 @@
-<h2>Ochen Composer — проверка запуска</h2>
-<p>Count: <input id="count" type="number" value="5"></p>
-<button id="create">Create</button>
-<button id="cancel">Cancel</button>
+﻿<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<style>
+*{box-sizing:border-box}body{margin:0;padding:24px;font:12px/1.5 Inter,system-ui,sans-serif;color:var(--figma-color-text,#222);background:var(--figma-color-bg,#fff)}h1{font-size:24px;letter-spacing:-.8px;margin:0 0 6px}p{color:var(--figma-color-text-secondary,#777)}label{display:block;margin:18px 0 6px;font-weight:600}textarea,select,button{font:inherit;border-radius:7px;border:1px solid var(--figma-color-border,#ddd);padding:10px;color:inherit;background:var(--figma-color-bg,#fff)}textarea{width:100%;resize:vertical;min-height:90px}select{width:100%}.row{display:flex;gap:12px}.row>div{flex:1}button{width:100%;margin-top:20px;background:#6654e8;border-color:#6654e8;color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}#status{margin-top:16px;overflow-wrap:anywhere}#status[data-error=true]{color:var(--figma-color-text-danger,#c33)}.tag{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--figma-color-text-secondary,#777);margin-bottom:8px}
+</style>
+<body>
+<div class="tag">Первая сборка · без модели</div>
+<h1>Ochen Composer</h1>
+<p>Введите названия предметов — плагин разместит их в новом фрейме.</p>
+<label for="query">Что должно быть в композиции</label>
+<textarea id="query" maxlength="1000" placeholder="Книга, телефон, монета">Книга, телефон, монета</textarea>
+<p id="catalog">Загружаем каталог…</p>
+<div class="row"><div><label for="format">Формат</label><select id="format"><option value="square">1000 × 1000</option><option value="landscape">1200 × 630</option><option value="portrait">800 × 1200</option></select></div><div><label for="size">Графика</label><select id="size"><option value="large">L — large</option><option value="small">S — small</option></select></div></div>
+<button id="compose" disabled>Собрать композицию</button>
+<div id="status" role="status" aria-live="polite">Подготовка библиотеки…</div>
+<p>До 8 предметов. Разделяйте названия запятыми или переносами строк. Повтор названия добавляет ещё один экземпляр.</p>
+<p>Пока используется простая раскладка с исходными цветами. Художественные шаблоны, палитры и экспорт из панели — следующие этапы.</p>
 <script>
-
-document.getElementById('create').onclick = () => {
-  const textbox = document.getElementById('count');
-  const count = parseInt(textbox.value, 10);
-  parent.postMessage({ pluginMessage: { type: 'create-shapes', count } }, '*')
-}
-
-document.getElementById('cancel').onclick = () => {
-  parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*')
-}
-
+const el=id=>document.getElementById(id);
+let ready=false,busy=false;
+function send(message){parent.postMessage({pluginMessage:message},'*')}
+function update(){el('compose').disabled=!ready||busy||!el('query').value.trim()}
+el('query').oninput=update;
+el('compose').onclick=()=>{busy=true;update();el('status').textContent='Собираем композицию…';el('status').dataset.error='false';send({type:'compose',text:el('query').value,format:el('format').value,size:el('size').value})};
+window.onmessage=event=>{const msg=event.data.pluginMessage;if(!msg||typeof msg.type!=='string')return;if(msg.type==='catalog'){ready=true;el('catalog').textContent='Доступны: '+msg.names.join(', ')+'.';el('status').textContent='Библиотека готова.';update()}if(msg.type==='busy'){busy=msg.value;update()}if(msg.type==='error'||msg.type==='success'){el('status').textContent=msg.message;el('status').dataset.error=String(msg.type==='error')}};
+send({type:'catalog'});
 </script>
+</body></html>
