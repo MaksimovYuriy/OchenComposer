@@ -5,6 +5,77 @@ type Asset = {
 type Placement = { asset: Asset; x: number; y: number; scale: number };
 type Backdrop = { size: 'large' | 'small'; svg: string; width: number; height: number };
 type ScenePlacement = Placement & { role: 'main' | 'support' | 'background'; order: number };
+type TemplateId = 'diagonal' | 'focus' | 'terrace';
+type ScenePlan = { template: TemplateId; seed: number; placements: ScenePlacement[] };
+type Zone = { x: number; y: number; w: number; h: number };
+
+function composeScene(assets: Asset[], backgrounds: Asset[], duplicate: boolean,
+  width: number, height: number, template: string, seed: number): ScenePlan {
+  if (!assets.length || assets.length > 8) throw new Error('Допустимо от 1 до 8 предметов.');
+  if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647) throw new Error('Seed: целое число от 0 до 2147483647.');
+  if (![width, height].every(v => Number.isFinite(v) && v >= 300 && v <= 2000)) throw new Error('Недопустимый размер холста.');
+  const templates: TemplateId[] = ['diagonal', 'focus', 'terrace'];
+  if (template !== 'auto' && !templates.includes(template as TemplateId)) throw new Error('Неизвестная схема композиции.');
+  const chosen = template === 'auto' ? templates[seed % 3] : template as TemplateId;
+  let state = (seed + 1) >>> 0;
+  const random = () => { state = (Math.imul(1664525, state) + 1013904223) >>> 0; return state / 4294967296; };
+  const result: ScenePlacement[] = [];
+  function fit(asset: Asset, role: ScenePlacement['role'], zone: Zone): void {
+    if (![asset.width, asset.height].every(v => Number.isFinite(v) && v > 0)) throw new Error('Некорректные размеры предмета.');
+    const factor = .92 + random() * .06;
+    const scale = Math.min(zone.w * width / asset.width, zone.h * height / asset.height) * factor;
+    const remainingW = zone.w * width - asset.width * scale;
+    const remainingH = zone.h * height - asset.height * scale;
+    result.push({ asset, role, order: result.length, scale,
+      x: zone.x * width + remainingW * (.35 + random() * .30),
+      y: zone.y * height + remainingH * (.35 + random() * .30) });
+  }
+  if (duplicate) {
+    const background = backgrounds.find(a => a.id === assets[0].id && a.size === assets[0].size);
+    if (!background) throw new Error('Не найден фоновый вариант главного предмета.');
+    fit(background, 'background', chosen === 'terrace'
+      ? { x: .04, y: .39, w: .45, h: .49 } : { x: .04, y: .05, w: .43, h: .38 });
+  }
+  let hero: Zone;
+  let supports: Zone[] = [];
+  const count = assets.length - 1;
+  function strip(zone: Zone, horizontal: boolean): Zone[] {
+    return Array.from({ length: count }, (_, i) => horizontal
+      ? { x: zone.x + zone.w * i / count, y: zone.y, w: zone.w / count * .90, h: zone.h }
+      : { x: zone.x, y: zone.y + zone.h * i / count, w: zone.w, h: zone.h / count * .90 });
+  }
+  if (!count) {
+    hero = chosen === 'terrace' ? { x: .13, y: .08, w: .76, h: .73 }
+      : chosen === 'focus' ? { x: .12, y: .15, w: .76, h: .72 }
+      : { x: .15, y: .30, w: .78, h: .64 };
+  } else if (chosen === 'terrace') {
+    hero = { x: .12, y: .07, w: .76, h: .54 };
+    supports = strip({ x: .07, y: .70, w: .87, h: .24 }, true);
+  } else if (chosen === 'focus') {
+    if (height > width && count <= 2) {
+      hero = { x: .08, y: .26, w: .84, h: .46 };
+      supports = [{ x: .58, y: .05, w: .34, h: .17 }, { x: .08, y: .80, w: .35, h: .15 }].slice(0, count);
+    } else if (height > width) {
+      hero = { x: .08, y: .10, w: .84, h: .50 };
+      supports = strip({ x: .08, y: .72, w: .84, h: .22 }, true);
+    } else {
+      hero = { x: .06, y: .18, w: .59, h: .68 };
+      supports = strip({ x: .73, y: .08, w: .22, h: .84 }, false);
+    }
+  } else if (width === height && count <= 2) {
+    hero = count === 1 ? { x: .08, y: .36, w: .72, h: .56 } : { x: .06, y: .36, w: .60, h: .56 };
+    supports = [{ x: .49, y: .08, w: .44, h: .28 }, { x: .72, y: .60, w: .22, h: .26 }].slice(0, count);
+  } else if (height > width) {
+    hero = { x: .10, y: .40, w: .80, h: .53 };
+    supports = strip({ x: .08, y: .07, w: .85, h: .25 }, true);
+  } else {
+    hero = { x: .06, y: .27, w: .56, h: .65 };
+    supports = strip({ x: .69, y: .08, w: .25, h: .84 }, false);
+  }
+  fit(assets[0], 'main', hero);
+  assets.slice(1).forEach((asset, index) => fit(asset, 'support', supports[(index + seed % count) % count]));
+  return { template: chosen, seed, placements: result };
+}
 
 // Hero below/left, accents above/right; foreground fit rectangles do not overlap.
 function composeSquare(assets: Asset[], backgrounds: Asset[], duplicate: boolean): ScenePlacement[] {

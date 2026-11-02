@@ -29,10 +29,10 @@ module.exports = tseslint.config(
   {
     files: ['core.ts'],
     rules: {
-      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^(_|resolveNames$|layoutObjects$|composeSquare$|Backdrop$)' }],
+      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^(_|resolveNames$|layoutObjects$|composeSquare$|composeScene$|Backdrop$)' }],
     },
   },
   {
-    ignores: ['code.js', 'generated/**', 'scripts/**', 'tests/**', 'dist', 'eslint.config.js'],
+    ignores: ['code.js', 'out/**', 'generated/**', 'scripts/**', 'tests/**', 'dist', 'eslint.config.js'],
   },
 )

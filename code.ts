@@ -1,5 +1,6 @@
 figma.showUI(__html__, { width: 440, height: 700, themeColors: true });
 let busy = false;
+let previousResult: FrameNode | undefined;
 figma.ui.onmessage = (message: unknown) => {
   if (!message || typeof message !== 'object' || !('type' in message)) return;
   const request = message as Record<string, unknown>;
@@ -20,27 +21,49 @@ figma.ui.onmessage = (message: unknown) => {
     const candidates = ASSETS.filter(asset => asset.role === 'main' && asset.size === request.size);
     const selected = resolveNames(request.text, candidates);
     if (typeof request.backgroundDuplicate !== 'boolean') throw new Error('Некорректная настройка фона.');
-    const square = request.format === 'square';
-    const placements: ScenePlacement[] = square
-      ? composeSquare(selected, ASSETS.filter(a => a.role === 'background'), request.backgroundDuplicate)
-      : layoutObjects(selected, width, height).map((placement, index) => ({ ...placement, role: index === 0 ? 'main' : 'support', order: index }));
+    if (typeof request.template !== 'string' || typeof request.seed !== 'number') throw new Error('Выберите схему и seed.');
+    const plan = composeScene(selected, ASSETS.filter(a => a.role === 'background'), request.backgroundDuplicate,
+      width, height, request.template, request.seed);
+    const placements = plan.placements;
     frame = figma.createFrame();
-    frame.name = `Ochen — ${selected.map(asset => asset.name).join(', ')}`;
+    frame.name = `Ochen — ${selected.map(asset => asset.name).join(', ')} · ${plan.template} #${plan.seed}`;
     frame.resize(width, height);
     frame.clipsContent = false;
     frame.x = figma.viewport.center.x - width / 2;
     frame.y = figma.viewport.center.y - height / 2;
+    if (previousResult && !previousResult.removed && previousResult.parent === figma.currentPage) {
+      frame.x = previousResult.x + previousResult.width + 80;
+      frame.y = previousResult.y;
+    }
     frame.setPluginData('ochen-composition', '1');
-    frame.setPluginData('ochen-template', square ? 'diagonal-hero-v1' : 'grid-v1');
-    if (square) {
+    frame.setPluginData('ochen-template', plan.template);
+    frame.setPluginData('ochen-seed', String(plan.seed));
+    frame.setPluginData('ochen-plan', JSON.stringify({ version: 1, ids: selected.map(a => a.id), size: request.size,
+      width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: request.backgroundDuplicate }));
+    {
       const backdrop = BACKDROPS.find(a => a.size === request.size);
       if (!backdrop) throw new Error('Не найден исходный фон.');
       const background = figma.createNodeFromSvg(backdrop.svg);
       frame.appendChild(background);
       background.name = 'Фон — исходный фиолетовый';
-      background.rescale(width / backdrop.width);
-      background.x = 0;
-      background.y = 0;
+      const scale = Math.max(width / backdrop.width, height / backdrop.height);
+      background.rescale(scale);
+      background.x = (width - backdrop.width * scale) / 2;
+      background.y = (height - backdrop.height * scale) / 2;
+      // Crop only the source background; foreground objects remain whole.
+      const backgroundClip = figma.createFrame();
+      frame.appendChild(backgroundClip);
+      backgroundClip.name = 'Фон';
+      backgroundClip.resize(width, height);
+      backgroundClip.x = 0;
+      backgroundClip.y = 0;
+      backgroundClip.fills = [];
+      backgroundClip.clipsContent = true;
+      backgroundClip.appendChild(background);
+      // Reparenting can change local coordinates; set them explicitly again.
+      background.x = (width - backdrop.width * scale) / 2;
+      background.y = (height - backdrop.height * scale) / 2;
+      backgroundClip.locked = true;
       background.locked = true;
     }
     for (const placement of placements) {
@@ -57,7 +80,9 @@ figma.ui.onmessage = (message: unknown) => {
     }
     figma.currentPage.selection = [frame];
     figma.viewport.scrollAndZoomIntoView([frame]);
-    figma.ui.postMessage({ type: 'success', message: `Создано предметов: ${selected.length}${square && request.backgroundDuplicate ? ' + 1 фоновый дубль' : ''}. ${square ? 'Главный: ' + selected[0].name + '.' : 'Простая раскладка.'} Каждый предмет можно редактировать в Figma.` });
+    previousResult = frame;
+    figma.ui.postMessage({ type: 'success', seed: plan.seed, template: plan.template,
+      message: `Предметов: ${selected.length}${request.backgroundDuplicate ? ' + 1 фоновый дубль' : ''}. Главный: ${selected[0].name}. Схема: ${plan.template}, seed: ${plan.seed}.` });
   } catch (error) {
     if (frame && !frame.removed) frame.remove();
     console.error('Ochen Composer:', error);
