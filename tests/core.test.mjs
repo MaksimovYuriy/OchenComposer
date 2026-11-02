@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import test from 'node:test';
@@ -41,4 +41,51 @@ test('Invalid geometry is rejected', () => {
   assert.throws(() => context.layoutObjects([], 1000, 1000));
   assert.throws(() => context.layoutObjects(assets, NaN, 1000));
   assert.throws(() => context.layoutObjects([{ ...assets[0], width: 0 }], 1000, 1000));
+});
+
+function realAssets(folder, role, size) {
+  const directory = new URL(`../assets/${folder}/${size}/`, import.meta.url);
+  return readdirSync(directory).filter(name => name.endsWith('.svg')).map(name => {
+    const svg = readFileSync(new URL(encodeURIComponent(name), directory), 'utf8');
+    const box = svg.match(/viewBox="([^"]+)"/)[1].split(/\s+/).map(Number);
+    return { id: name, name, size, role, svg, width: box[2], height: box[3] };
+  });
+}
+
+test('Square hero: all real variants, 1–8 objects, complete membership and no foreground collisions', () => {
+  for (const size of ['large', 'small']) {
+    const main = realAssets('mainground', 'main', size);
+    const background = realAssets('background', 'background', size);
+    for (let start = 0; start < main.length; start++) {
+      for (let count = 1; count <= 8; count++) {
+        const selected = Array.from({ length: count }, (_, i) => main[(start + i) % main.length]);
+        const scene = context.composeSquare(selected, background, true);
+        assert.equal(scene[0].role, 'background');
+        assert.equal(scene[0].asset.id, selected[0].id);
+        const foreground = scene.filter(p => p.role !== 'background');
+        assert.deepEqual(Array.from(foreground, p => p.asset.id), selected.map(a => a.id));
+        assert.equal(foreground[0].role, 'main');
+        for (const [i, p] of foreground.entries()) {
+          const w = p.asset.width * p.scale, h = p.asset.height * p.scale;
+          assert.ok(p.x >= 0 && p.y >= 0 && p.x + w <= 1000 && p.y + h <= 1000);
+          assert.ok(p.order > 0 && p.scale > 0);
+          for (const q of foreground.slice(i + 1)) {
+            const overlapW = Math.min(p.x + w, q.x + q.asset.width * q.scale) - Math.max(p.x, q.x);
+            const overlapH = Math.min(p.y + h, q.y + q.asset.height * q.scale) - Math.max(p.y, q.y);
+            assert.ok(overlapW <= .001 || overlapH <= .001, `Foreground collision: ${p.asset.name}, ${q.asset.name}`);
+          }
+        }
+      }
+    }
+  }
+});
+
+test('Background is optional; duplicates remain explicit foreground instances', () => {
+  const main = realAssets('mainground', 'main', 'large');
+  const scene = context.composeSquare([main[0], main[0]], [], false);
+  assert.equal(scene.length, 2);
+  assert.equal(scene[0].asset, scene[1].asset);
+  assert.ok(scene.every(p => p.role !== 'background'));
+  assert.throws(() => context.composeSquare([main[0]], [], true), /фоновый вариант/);
+  assert.throws(() => context.composeSquare([], [], false));
 });
