@@ -1,0 +1,14 @@
+# Node
+*.log
+*.log.*
+node_modules
+
+out/
+dist/
+code.js
+
+node_modules/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
