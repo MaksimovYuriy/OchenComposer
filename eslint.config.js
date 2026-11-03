@@ -45,6 +45,10 @@ module.exports = tseslint.config(
     },
   },
   {
+    files:['export.ts'],
+    rules:{'@typescript-eslint/no-unused-vars':['error',{varsIgnorePattern:'^(prepareSvgExport|SvgExport)$'}]},
+  },
+  {
     ignores: ['code.js', 'out/**', 'generated/**', 'scripts/**', 'tests/**', 'dist', 'eslint.config.js'],
   },
 )

@@ -5,9 +5,9 @@
 *{box-sizing:border-box}body{margin:0;padding:20px;font:12px/1.5 Inter,system-ui,sans-serif;color:var(--figma-color-text,#222);background:var(--figma-color-bg,#fff)}h1{font-size:23px;letter-spacing:-.7px;margin:0}h2{font-size:14px;margin:20px 0 8px}p{color:var(--figma-color-text-secondary,#777);margin:8px 0}label{display:block;margin:14px 0 5px;font-weight:600}input,textarea,select,button{font:inherit;border-radius:7px;border:1px solid var(--figma-color-border,#ddd);padding:9px;color:inherit;background:var(--figma-color-bg,#fff)}input:not([type=checkbox]),select,textarea{width:100%}textarea{resize:vertical;min-height:80px}.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}.primary{background:#6654e8;border-color:#6654e8;color:white}.actions{margin:12px 0}.danger{color:var(--figma-color-text-danger,#bd3341)}#status{padding:10px;margin:12px 0;background:var(--figma-color-bg-secondary,#f5f5f7);border-radius:7px;overflow-wrap:anywhere}#status[data-error=true]{color:var(--figma-color-text-danger,#c33)}.tag{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--figma-color-text-secondary,#777);margin-bottom:5px}.tabs{display:flex;gap:8px;margin-top:16px}.tabs button{flex:1}.tabs button[data-active=true]{background:#6654e8;color:white;border-color:#6654e8}[hidden]{display:none!important}.small{font-size:11px}.move button{font-size:16px;padding:6px}.section{border-top:1px solid var(--figma-color-border,#ddd);margin-top:16px;padding-top:2px}
 </style>
 <body>
-<div class="tag">Итерация 4 · цветовые схемы</div>
+<div class="tag">Итерация 5 · экспорт SVG</div>
 <h1>Ochen Composer</h1>
-<div class="tabs"><button id="tab-build" data-active="true">Сборка</button><button id="tab-edit" data-active="false">Правка</button><button id="tab-palette" data-active="false">Палитра</button></div>
+<div class="tabs"><button id="tab-build" data-active="true">Сборка</button><button id="tab-edit" data-active="false">Правка</button><button id="tab-palette" data-active="false">Палитра</button><button id="tab-export">SVG</button></div>
 <div id="status" role="status" aria-live="polite">Подготовка библиотеки…</div>
 <section id="build-panel">
 <label for="query">Что должно быть в композиции</label>
@@ -57,12 +57,45 @@
 <p class="small">До 10 личных схем сохраняются в настройках плагина. Палитра композиции хранится также внутри документа; после перезапуска её можно продолжать использовать. Повторный импорт того же личного id обновляет запись, не перекрашивая старые сцены.</p>
 </div>
 </section>
+<section id="export-panel" hidden>
+<h2>Скачать композицию</h2>
+<p id="export-target">Выберите композицию или её предмет в Figma.</p>
+<button id="export-svg" class="primary" disabled>Подготовить SVG</button>
+<p>Экспортируется текущее состояние: цвета, расположение, повороты и порядок слоёв. Каждый предмет сохраняется отдельной векторной группой.</p>
+<p id="export-info" class="small"></p>
+<a id="export-download" hidden>Скачать SVG</a>
+<p class="small">После изменений подготовьте файл заново. Для проверки перетащите скачанный SVG обратно в Figma и проверьте отдельные предметы.</p>
+</section>
 <script>
 const el=id=>document.getElementById(id);
 let ready=false,busy=false,selectedAsset=null,selectedScene=null;
 let paletteEntries=[],chosenPaletteKey='builtin:violet';
 function send(message){parent.postMessage({pluginMessage:message},'*')}
-function tab(name){['build','edit','palette'].forEach(id=>{el(id+'-panel').hidden=name!==id;el('tab-'+id).dataset.active=String(name===id)})}
+function tab(name){['build','edit','palette','export'].forEach(id=>{el(id+'-panel').hidden=name!==id;el('tab-'+id).dataset.active=String(name===id)})}
+el('tab-export').onclick=()=>tab('export');
+let exportUrl=null;
+function clearExport(){if(exportUrl)URL.revokeObjectURL(exportUrl);exportUrl=null;el('export-download').hidden=true;el('export-info').textContent=''}
+el('export-svg').onclick=()=>{if(busy||!selectedScene)return;clearExport();busy=true;update();el('status').dataset.error='false';el('status').textContent='Подготавливаем SVG…';send({type:'export-svg',sceneId:selectedScene.id})};
+function validateSvgExport(result){
+ const svg=result.svg;
+ if(typeof svg!=='string'||svg.length>20*1024*1024||/<!DOCTYPE|<!ENTITY|<\?xml-stylesheet/i.test(svg))throw new Error('Некорректный SVG.');
+ const doc=new DOMParser().parseFromString(svg,'image/svg+xml'),root=doc.documentElement;
+ if(doc.querySelector('parsererror')||root.localName!=='svg'||root.namespaceURI!=='http://www.w3.org/2000/svg')throw new Error('Не удалось прочитать векторный SVG.');
+ const box=(root.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+ if(box.length!==4||!box.every(Number.isFinite)||Math.abs(box[0])>.01||Math.abs(box[1])>.01||Math.abs(box[2]-result.width)>.01||Math.abs(box[3]-result.height)>.01)throw new Error('Размер SVG не совпал с холстом композиции.');
+ const ids=new Map(),refs=[];
+ for(const node of [root,...root.querySelectorAll('*')]){
+  if(['image','script','foreignobject','iframe','video','audio'].includes(node.localName.toLowerCase()))throw new Error('SVG содержит растр или неподдерживаемую вставку.');
+  const id=node.getAttribute('id');if(id){if(ids.has(id))throw new Error('Повторяющиеся идентификаторы SVG.');ids.set(id,node)}
+  const values=[...node.attributes].map(a=>{if(/^on/i.test(a.name))throw new Error('Недопустимый обработчик в SVG.');if(a.localName==='href'){if(!a.value.startsWith('#'))throw new Error('Внешний ресурс в SVG.');refs.push(a.value.slice(1))}return a.value});
+  if(node.localName==='style')values.push(node.textContent);
+  for(const value of values){if(/@import|javascript:|expression\s*\(/i.test(value))throw new Error('Внешние стили в SVG.');for(const match of value.matchAll(/url\(\s*['"]?([^)'"\s]+)['"]?\s*\)/gi)){if(!match[1].startsWith('#'))throw new Error('Внешний ресурс в SVG.');refs.push(match[1].slice(1))}}
+ }
+ if(refs.some(id=>!ids.has(id)))throw new Error('В SVG потеряна ссылка на маску или градиент.');
+ if(!Array.isArray(result.groups)||!result.groups.length)throw new Error('Нет групп предметов.');
+ for(const group of result.groups){const node=ids.get(group.id);if(!node||node.localName!=='g'||!node.querySelector('path,rect,circle,ellipse,polygon,polyline,line,use'))throw new Error('SVG не сохранил отдельную векторную группу предмета.');node.setAttribute('aria-label',group.name);const title=doc.createElementNS(root.namespaceURI,'title');title.textContent=group.name;node.insertBefore(title,node.firstChild)}
+ return new XMLSerializer().serializeToString(doc);
+}
 el('tab-build').onclick=()=>tab('build');el('tab-edit').onclick=()=>tab('edit');
 el('tab-palette').onclick=()=>tab('palette');el('choose-palette').onclick=()=>tab('palette');
 function samePalette(a,b){return a&&b&&a.id===b.id&&a.version===b.version&&JSON.stringify(a.colors)===JSON.stringify(b.colors)}
@@ -102,6 +135,8 @@ el('palette-file').onchange=async()=>{
  finally{el('palette-file').value='';}
 };
 function update(){
+ el('export-svg').disabled=busy||!selectedScene;
+ el('export-target').textContent=selectedScene?'Выбрана: '+selectedScene.name:'Выберите композицию или её предмет в Figma.';
  const disabled=!ready||busy||!el('query').value.trim();el('compose').disabled=disabled;el('variant').disabled=disabled;
  el('state-main').disabled=busy||!selectedAsset||selectedAsset.state==='main';
  el('state-background').disabled=busy||!selectedAsset||selectedAsset.state==='background';
@@ -129,6 +164,10 @@ window.onmessage=event=>{
  const msg=event.data.pluginMessage;if(!msg||typeof msg.type!=='string')return;
  if(msg.type==='catalog'){ready=true;el('catalog').textContent='Доступны: '+msg.names.join(', ')+'.';el('status').textContent='Библиотека готова.';update()}
  if(msg.type==='busy'){busy=msg.value;update()}
+ if(msg.type==='svg-export'){
+  try{const svg=validateSvgExport(msg);clearExport();exportUrl=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}));const link=el('export-download');link.href=exportUrl;link.download=msg.filename;link.hidden=false;link.textContent='Скачать '+msg.filename;el('export-info').textContent=msg.sceneName+' · '+msg.width+' × '+msg.height+' · предметов: '+msg.groups.length+' · снимок на момент подготовки';el('status').textContent='SVG готов к скачиванию.';el('status').dataset.error='false';tab('export')}
+  catch(error){clearExport();el('status').textContent=error.message;el('status').dataset.error='true'}
+ }
  if(msg.type==='palettes'){paletteEntries=msg.entries;renderPalettes(msg.selectedKey)}
  if(msg.type==='palette-notice'){el('status').textContent=msg.message;el('status').dataset.error='true'}
  if(msg.type==='asset-selection'){

@@ -103,6 +103,13 @@ figma.ui.onmessage = async (message: unknown) => {
     sendSelectionState();
     return;
   }
+  if(request.type==='export-svg'&&!busy){
+    busy=true;figma.ui.postMessage({type:'busy',value:true});
+    try{const result=await prepareSvgExport(request.sceneId);figma.ui.postMessage({type:'svg-export',...result});}
+    catch(error){figma.ui.postMessage({type:'error',message:error instanceof Error?error.message:'Не удалось подготовить SVG.'});}
+    finally{busy=false;figma.ui.postMessage({type:'busy',value:false});sendSelectionState();}
+    return;
+  }
   if((request.type==='apply-palette'||request.type==='import-palette')&&!busy){
     busy=true;figma.ui.postMessage({type:'busy',value:true});
     try{

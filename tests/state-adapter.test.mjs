@@ -7,12 +7,14 @@ import {palettePrelude,paletteLibrary} from './palette-fixture.mjs';
 
 function session(){
   let fail=false;
+  let exportFailure=false,exported;
   let sequence=0;
   const events={};
   function node(type='FRAME',width=800,height=400){
     const data={};
     const n={id:String(++sequence),type,width,height,name:'Книга',children:[],parent:null,removed:false,
       fills:[],strokes:[],fillStyleId:'',strokeStyleId:'',isMask:false,
+      async exportAsync(options){exported={options,node:this,children:this.children.map(child=>({name:child.name,matrix:JSON.stringify(child.relativeTransform),fills:JSON.stringify(child.fills)}))};if(exportFailure)throw new Error('Export failed');return '<svg/>';},
       relativeTransform:[[0,-1,250],[1,0,90]],opacity:.8,blendMode:'NORMAL',visible:true,locked:false,
       getPluginData:k=>data[k]||'',setPluginData:(k,v)=>data[k]=v,getPluginDataKeys:()=>Object.keys(data),
       insertChild(index,child){if(child.parent){const old=child.parent.children;old.splice(old.indexOf(child),1);}this.children.splice(index,0,child);child.parent=this;},
@@ -43,9 +45,33 @@ function session(){
   vm.runInContext(ts.transpile(readFileSync(new URL('../core.ts',import.meta.url),'utf8')+
     '\nconst ASSETS = '+JSON.stringify([{...asset,role:'main'},{...asset,role:'background'}])+';const BACKDROPS=[];\n'+
     readFileSync(new URL('../editor.ts',import.meta.url),'utf8')+'\n'+
+    readFileSync(new URL('../export.ts',import.meta.url),'utf8')+'\n'+
     readFileSync(new URL('../code.ts',import.meta.url),'utf8'),{target:ts.ScriptTarget.ES2020}),context);
-  return {figma,frame,source,other,messages,node,events,failImport:()=>fail=true};
+  return {figma,frame,source,other,messages,node,events,failImport:()=>fail=true,failExport:()=>exportFailure=true,exported:()=>exported};
 }
+
+test('Export snapshots current transforms, colors and separate group names without modifying the scene',async()=>{
+ const s=session();s.frame.name='My: scene';s.source.fills=[{type:'SOLID',color:{r:.2,g:.3,b:.4}}];
+ const original=JSON.stringify(s.source.relativeTransform),names=s.frame.children.map(n=>n.name);
+ await s.figma.ui.onmessage({type:'export-svg',sceneId:s.frame.id});
+ const result=s.messages.find(m=>m.type==='svg-export');assert.ok(result);assert.equal(result.filename,'My_ scene.svg');
+ assert.equal(result.width,1200);assert.equal(result.groups.length,1);assert.equal(result.groups[0].assetId,'book');
+ assert.equal(s.exported().children[1].name,result.groups[0].id);assert.equal(s.exported().children[1].matrix,original);
+ assert.equal(s.exported().children[1].fills,JSON.stringify(s.source.fills));
+ assert.deepEqual(s.frame.children.map(n=>n.name),names);assert.equal(s.figma.currentPage.children.length,1);
+ assert.equal(s.exported().node.removed,true);assert.equal(s.figma.currentPage.selection[0],s.source);
+ assert.equal(s.exported().options.svgIdAttribute,true);assert.equal(s.exported().options.svgSimplifyStroke,false);
+});
+
+test('Export errors clean up snapshots and reject stale targets, raster fills and foreign geometry',async()=>{
+ for(const kind of ['failure','stale','raster','foreign','hidden']){
+  const s=session();if(kind==='failure')s.failExport();if(kind==='raster')s.source.fills=[{type:'IMAGE'}];
+  if(kind==='foreign')s.frame.appendChild(s.node('RECTANGLE'));if(kind==='hidden')s.source.visible=false;
+  await s.figma.ui.onmessage({type:'export-svg',sceneId:kind==='stale'?'wrong':s.frame.id});
+  assert.ok(s.messages.some(m=>m.type==='error'),kind);assert.ok(!s.messages.some(m=>m.type==='svg-export'),kind);
+  assert.equal(s.figma.currentPage.children.length,1,kind);assert.equal(s.source.removed,false);
+ }
+});
 
 test('State replacement preserves rotation/position, size, layer index and other instances through repeated switches',()=>{
   const s=session();const transform=JSON.stringify(s.source.relativeTransform);

@@ -7,7 +7,7 @@ import {paletteLibrary} from './palette-fixture.mjs';
 function panel() {
   const makeElement=()=>({value:'',dataset:{},style:{},disabled:false,checked:true,children:[],replaceChildren(){this.children=[];},appendChild(child){this.children.push(child);}});
   const elements = Object.fromEntries(['compose','variant','query','format','size','template','seed','status','catalog','background-duplicate','state-main','state-background','selected-asset','state-mode','scene-name','add-name','add-state','add','move-left','move-right','move-up','move-down','edit-angle','rotate','duplicate','delete','raise','lower','tab-build','tab-edit','build-panel','edit-panel','tab-palette','palette-panel','choose-palette','palette-select','palette-swatches','palette-warnings','palette-target','palette-example','palette-file','apply-palette','build-palette-name','scene-palette-name']
-    .map(id=>[id,makeElement()]));
+    .concat(['tab-export','export-panel','export-target','export-svg','export-info','export-download']).map(id=>[id,makeElement()]));
   Object.assign(elements.query,{value:'Книга, телефон, монета'});
   elements.format.value='portrait';elements.size.value='small';elements.template.value='auto';elements.seed.value='0';
   elements['state-mode'].value='color';
@@ -21,6 +21,13 @@ function panel() {
   receive({type:'palettes',entries:paletteLibrary.map(p=>({key:'builtin:'+p.id,palette:p,warnings:[]}))});
   return {elements,messages,receive};
 }
+
+test('SVG export targets the selected composition and disables while preparing',()=>{
+ const {elements,messages,receive}=panel();assert.equal(elements['export-svg'].disabled,true);
+ receive({type:'asset-selection',selected:null,scene:{id:'scene-export',name:'Scene',count:2}});
+ elements['export-svg'].onclick();assert.equal(messages.at(-1).type,'export-svg');assert.equal(messages.at(-1).sceneId,'scene-export');assert.equal(elements['export-svg'].disabled,true);
+ receive({type:'busy',value:false});receive({type:'asset-selection',selected:null,scene:null});assert.equal(elements['export-svg'].disabled,true);
+});
 
 test('New variant increments seed; normal build reproduces it with the same query',()=>{
   const {elements,messages,receive}=panel();
