@@ -3,6 +3,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {palettePrelude,paletteLibrary} from './palette-fixture.mjs';
 
 function session(){
   let fail=false;
@@ -11,6 +12,7 @@ function session(){
   function node(type='FRAME',width=800,height=400){
     const data={};
     const n={id:String(++sequence),type,width,height,name:'Книга',children:[],parent:null,removed:false,
+      fills:[],strokes:[],fillStyleId:'',strokeStyleId:'',isMask:false,
       relativeTransform:[[0,-1,250],[1,0,90]],opacity:.8,blendMode:'NORMAL',visible:true,locked:false,
       getPluginData:k=>data[k]||'',setPluginData:(k,v)=>data[k]=v,getPluginDataKeys:()=>Object.keys(data),
       insertChild(index,child){if(child.parent){const old=child.parent.children;old.splice(old.indexOf(child),1);}this.children.splice(index,0,child);child.parent=this;},
@@ -19,8 +21,11 @@ function session(){
       rescale(scale){this.width*=scale;this.height*=scale;},
       on(event,callback){events[event]=callback;},off(event){delete events[event];},
       clone(){const copy=node(this.type,this.width,this.height);copy.relativeTransform=this.relativeTransform.map(row=>[...row]);copy.name=this.name;
+        copy.fills=JSON.parse(JSON.stringify(this.fills));copy.strokes=JSON.parse(JSON.stringify(this.strokes));
         copy.opacity=this.opacity;copy.visible=this.visible;copy.locked=this.locked;copy.blendMode=this.blendMode;
-        for(const key of Object.keys(data))copy.setPluginData(key,data[key]);this.parent.appendChild(copy);return copy;},
+        for(const key of Object.keys(data))copy.setPluginData(key,data[key]);
+        for(const child of [...this.children])copy.appendChild(child.clone());
+        this.parent.appendChild(copy);return copy;},
     };return n;
   }
   const page=node('PAGE'),frame=node('FRAME',1200,1000),other=node(),source=node('FRAME',400,200);
@@ -28,11 +33,13 @@ function session(){
   source.setPluginData('ochen-asset-id','book');source.setPluginData('ochen-variant','large');source.setPluginData('ochen-role','main');source.setPluginData('ochen-state','main');
   const messages=[];
   const figma={showUI(){},on(){},currentPage:{...page,selection:[source]},ui:{postMessage:m=>messages.push(m)},
-    createNodeFromSvg(){if(fail)throw new Error('Import failed');return node();}};
+    createNodeFromSvg(){if(fail)throw new Error('Import failed');const root=node(),leaf=node('VECTOR');
+      leaf.fills=[{type:'SOLID',color:{r:215/255,g:205/255,b:245/255},opacity:.7}];root.appendChild(leaf);return root;}};
   // Ensure ancestry and current-page identity match the real document tree.
   figma.currentPage=page;page.selection=[source];
   const asset={id:'book',name:'Книга',size:'large',width:800,height:400,svg:'<svg/>',source:'test'};
   const context=vm.createContext({figma,__html__:'',console,setTimeout,clearTimeout});
+  vm.runInContext(palettePrelude,context);
   vm.runInContext(ts.transpile(readFileSync(new URL('../core.ts',import.meta.url),'utf8')+
     '\nconst ASSETS = '+JSON.stringify([{...asset,role:'main'},{...asset,role:'background'}])+';const BACKDROPS=[];\n'+
     readFileSync(new URL('../editor.ts',import.meta.url),'utf8')+'\n'+
@@ -175,4 +182,33 @@ test('Duplicate of a rotated subject keeps rotation, sizes and visibility',()=>{
   assert.notEqual(clone,s.source);
   for(const row of [0,1])for(const col of [0,1])assert.ok(Math.abs(clone.relativeTransform[row][col]-original[row][col])<1e-12);
   assert.equal(clone.width,400);assert.equal(clone.height,200);assert.equal(clone.visible,false);
+});
+
+test('Palette application keeps geometry/layers and active colors survive state switches, add and duplicate',async()=>{
+  const s=session(),leaf=s.node('VECTOR');
+  leaf.fills=[{type:'SOLID',color:{r:249/255,g:163/255,b:170/255},opacity:.6}];s.source.appendChild(leaf);
+  s.other.fills=[{type:'SOLID',color:{r:215/255,g:205/255,b:245/255}}];
+  const matrix=JSON.stringify(s.source.relativeTransform),nodes=s.frame.children.map(n=>n.id).join(',');
+  const orange=paletteLibrary.find(p=>p.id==='orange');
+  await s.figma.ui.onmessage({type:'apply-palette',palette:orange});
+  assert.equal(JSON.parse(s.frame.getPluginData('ochen-palette')).id,'orange');
+  assert.ok(Math.abs(leaf.fills[0].color.r-128/255)<1e-12);
+  assert.equal(leaf.fills[0].opacity,.6);
+  assert.equal(JSON.stringify(s.source.relativeTransform),matrix);
+  assert.equal(s.frame.children.map(n=>n.id).join(','),nodes);
+  assert.ok(Math.abs(s.other.fills[0].color.r-253/255)<1e-12);
+  for(const state of ['background','main']){
+    await s.figma.ui.onmessage({type:'set-state',state});
+    const node=s.figma.currentPage.selection[0];
+    assert.equal(JSON.stringify(node.relativeTransform),matrix);
+    assert.ok(Math.abs(node.children[0].fills[0].color.r-253/255)<1e-12);
+  }
+  await s.figma.ui.onmessage({type:'edit',action:'add',name:'Книга',state:'main'});
+  const added=s.figma.currentPage.selection[0];
+  assert.ok(Math.abs(added.children[0].fills[0].color.r-253/255)<1e-12);
+  await s.figma.ui.onmessage({type:'edit',action:'duplicate'});
+  const duplicate=s.figma.currentPage.selection[0];
+  assert.notEqual(duplicate,added);
+  assert.equal(JSON.stringify(duplicate.children[0].fills),JSON.stringify(added.children[0].fills));
+  assert.ok(!s.messages.some(m=>m.type==='error'));
 });

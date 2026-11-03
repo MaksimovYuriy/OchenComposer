@@ -21,6 +21,7 @@ function sceneItems(frame: FrameNode): FrameNode[] {
 function syncCurrentScene(frame: FrameNode): void {
   if (frame.removed) return;
   const snapshot = JSON.stringify({ version: 1, width: frame.width, height: frame.height,
+    palette:frame.getPluginData('ochen-palette') || '',
     items: sceneItems(frame).map(node => ({ instanceId: node.id, assetId: node.getPluginData('ochen-asset-id'),
       detail: node.getPluginData('ochen-variant'), state: node.getPluginData('ochen-state') || (node.getPluginData('ochen-role') === 'background' ? 'background' : 'main'),
       role: node.getPluginData('ochen-role'), parentId: node.parent?.id,
@@ -113,6 +114,7 @@ function editComposition(request: Record<string,unknown>): string {
     let added:FrameNode|undefined;
     try{
       added=figma.createNodeFromSvg(asset.svg);frame.appendChild(added);added.rescale(scale);added.relativeTransform=matrix;
+      recolorTree(added,getScenePalette(frame),asset.role==='background'?'monochrome':'object');
       added.name=asset.name+(asset.role==='background'?' — монохромный':'');
       added.setPluginData('ochen-asset-id',asset.id);added.setPluginData('ochen-variant',asset.size);
       added.setPluginData('ochen-state',asset.role);added.setPluginData('ochen-role','support');
@@ -133,7 +135,9 @@ function editComposition(request: Record<string,unknown>): string {
       const angle=Math.atan2(source.relativeTransform[1][0],source.relativeTransform[0][0])*180/Math.PI;
       const matrix=findSpace(frame,source.width,source.height,angle,boxFor(source.width,source.height,source.relativeTransform));
       let clone:FrameNode|undefined;
-      try{clone=source.clone();frame.insertChild(frame.children.indexOf(source)+1,clone);
+      try{clone=source.clone();
+        recolorTree(clone,getScenePalette(frame),(source.getPluginData('ochen-state') || (source.getPluginData('ochen-role')==='background'?'background':'main'))==='background'?'monochrome':'object');
+        frame.insertChild(frame.children.indexOf(source)+1,clone);
         clone.name=source.name+' — копия';clone.relativeTransform=matrix;clone.setPluginData('ochen-role','support');figma.currentPage.selection=[clone];
       }catch(error){if(clone&&!clone.removed)clone.remove();throw error;}
     }else if(action==='move'||action==='rotate'){

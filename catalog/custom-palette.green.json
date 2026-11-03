@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "forest-custom",
+  "name": "Лесная · пример загрузки",
+  "version": 1,
+  "colors": {
+    "surface": "#CEEBD4",
+    "mid": "#90BF9A",
+    "deep": "#356F43",
+    "accentLight": "#FFF0BD",
+    "accentStrong": "#F0A68D",
+    "accentSoft": "#FFE1D4",
+    "ink": "#18241B",
+    "paper": "#FFFFFF"
+  }
+}

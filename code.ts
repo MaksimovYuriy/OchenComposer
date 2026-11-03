@@ -23,11 +23,15 @@ function sendSelectionState(): void {
   const node = selectedAssetNode();
   const scene = selectedComposition();
   if (scene) trackedScene = scene;
+  let palette: Palette | undefined;
+  let paletteError: string | undefined;
+  if(scene){try{palette=getScenePalette(scene);}catch(error){paletteError=error instanceof Error?error.message:'Ошибка данных палитры.';}}
   figma.ui.postMessage({ type: 'asset-selection', selected: node ? {
     instanceId: node.id,
     name: node.name, state: node.getPluginData('ochen-state') || (node.getPluginData('ochen-role') === 'background' ? 'background' : 'main'),
     angle: Math.atan2(node.relativeTransform[1][0], node.relativeTransform[0][0]) * 180 / Math.PI,
-  } : null, scene: scene ? { name: scene.name, count: sceneItems(scene).length } : null });
+  } : null, scene: scene ? { id:scene.id, name: scene.name, count: sceneItems(scene).length, palette, paletteError,
+    paletteWarnings:palette?paletteWarnings(palette):[] } : null });
 }
 
 function changeSelectedState(state: unknown): void {
@@ -49,11 +53,14 @@ function changeSelectedState(state: unknown): void {
   let replacement: FrameNode | undefined;
   try {
     replacement = figma.createNodeFromSvg(newAsset.svg);
+    const scene=selectedComposition();
+    if(!scene)throw new Error('Композиция не выбрана.');
+    recolorTree(replacement,getScenePalette(scene),state==='background'?'monochrome':'object');
     replacement.rescale(scale);
     parent.insertChild(index, replacement);
     replacement.relativeTransform = transform;
     replacement.name = `${newAsset.name}${state === 'background' ? ' — монохромный' : ''}${source.getPluginData('ochen-role') === 'background' ? ' (дубль)' : ''}`;
-    for (const key of source.getPluginDataKeys()) replacement.setPluginData(key, source.getPluginData(key));
+    for (const key of source.getPluginDataKeys()) if(key!==BASELINE_KEY)replacement.setPluginData(key, source.getPluginData(key));
     replacement.setPluginData('ochen-state', state);
     replacement.opacity = source.opacity;
     replacement.blendMode = source.blendMode;
@@ -86,12 +93,35 @@ figma.on('currentpagechange', () => {
   trackedScene = undefined;
   sendSelectionState();
 });
-figma.ui.onmessage = (message: unknown) => {
+figma.ui.onmessage = async (message: unknown) => {
   if (!message || typeof message !== 'object' || !('type' in message)) return;
   const request = message as Record<string, unknown>;
   if (request.type === 'catalog') {
     figma.ui.postMessage({ type: 'catalog', names: ASSETS.filter(a => a.role === 'main' && a.size === 'large').map(a => a.name) });
+    sendPaletteCatalog();
+    void loadPersonalPalettes();
     sendSelectionState();
+    return;
+  }
+  if((request.type==='apply-palette'||request.type==='import-palette')&&!busy){
+    busy=true;figma.ui.postMessage({type:'busy',value:true});
+    try{
+      let palette:Palette;
+      let text:string;
+      if(request.type==='import-palette'){
+        const imported=await importPersonalPalette(request.palette);palette=imported.palette;
+        text=`Палитра «${palette.name}» загружена. Она доступна для сборки; для выбранной сцены нажмите «Применить».`;
+        if(!imported.persisted)text+=' Личное хранилище недоступно: схема доступна в этой сессии и сохранится в документе после применения.';
+      }else{
+        const scene=selectedComposition();
+        if(!scene)throw new Error('Выберите нашу композицию или один её предмет для перекраски.');
+        palette=requestedPalette(request.palette);applyScenePalette(scene,palette);syncCurrentScene(scene);
+        text=`Схема «${palette.name}» применена только к выбранной композиции.`;
+      }
+      const warnings=paletteWarnings(palette);
+      figma.ui.postMessage({type:'success',message:text+(warnings.length?' '+warnings.join(' '):'')});
+    }catch(error){figma.ui.postMessage({type:'error',message:error instanceof Error?error.message:'Не удалось применить палитру.'});}
+    finally{busy=false;figma.ui.postMessage({type:'busy',value:false});sendSelectionState();}
     return;
   }
   if ((request.type === 'set-state' || request.type === 'edit') && !busy) {
@@ -122,6 +152,7 @@ figma.ui.onmessage = (message: unknown) => {
     const formats: Record<string, [number, number]> = { square: [1000, 1000], landscape: [1200, 630], portrait: [800, 1200] };
     if (typeof request.format !== 'string' || !Object.prototype.hasOwnProperty.call(formats, request.format)) throw new Error('Неизвестный формат.');
     const [width, height] = formats[request.format];
+    const palette=requestedPalette(request.palette);
     const candidates = ASSETS.filter(asset => asset.role === 'main' && asset.size === request.size);
     const selected = resolveNames(request.text, candidates);
     const stateMode = request.stateMode === undefined ? 'color' : request.stateMode;
@@ -135,6 +166,7 @@ figma.ui.onmessage = (message: unknown) => {
     frame.name = `Ochen — ${selected.map(asset => asset.name).join(', ')} · ${plan.template} #${plan.seed}`;
     frame.resize(width, height);
     frame.clipsContent = false;
+    frame.fills = [];
     frame.x = figma.viewport.center.x - width / 2;
     frame.y = figma.viewport.center.y - height / 2;
     if (previousResult && !previousResult.removed && previousResult.parent === figma.currentPage) {
@@ -146,8 +178,9 @@ figma.ui.onmessage = (message: unknown) => {
     frame.setPluginData('ochen-seed', String(plan.seed));
     frame.setPluginData('ochen-scene-scale', String(placements[0].scale));
     frame.setPluginData('ochen-detail', request.size);
+    frame.setPluginData('ochen-palette',JSON.stringify(palette));
     frame.setPluginData('ochen-plan', JSON.stringify({ version: 2, ids: selected.map(a => a.id), size: request.size,
-      width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: request.backgroundDuplicate, stateMode,
+      width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: request.backgroundDuplicate, stateMode, palette,
       placements: placements.map(p => ({ id: p.asset.id, state: p.asset.role, role: p.role, rotation: p.rotation,
         pivot: p.pivot, scale: p.scale, transform: p.transform, order: p.order })) }));
     {
@@ -155,7 +188,8 @@ figma.ui.onmessage = (message: unknown) => {
       if (!backdrop) throw new Error('Не найден исходный фон.');
       const background = figma.createNodeFromSvg(backdrop.svg);
       frame.appendChild(background);
-      background.name = 'Фон — исходный фиолетовый';
+      recolorTree(background,palette,'background');
+      background.name = 'Фон — векторная подложка';
       const scale = Math.max(width / backdrop.width, height / backdrop.height);
       background.rescale(scale);
       background.x = (width - backdrop.width * scale) / 2;
@@ -188,6 +222,7 @@ figma.ui.onmessage = (message: unknown) => {
       node.setPluginData('ochen-role', placement.role);
       node.setPluginData('ochen-state', placement.asset.role);
       node.setPluginData('ochen-generated-rotation', String(placement.rotation));
+      recolorTree(node,palette,placement.asset.role==='background'?'monochrome':'object');
       node.rescale(placement.scale);
       node.relativeTransform = placement.transform;
     }

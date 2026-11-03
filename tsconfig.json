@@ -10,5 +10,5 @@
       "./node_modules/@figma"
     ]
   },
-  "files": ["core.ts", "generated/assets.ts", "editor.ts", "code.ts"]
+  "files": ["core.ts", "palette-core.ts", "generated/assets.ts", "palette-registry.ts", "palette-figma.ts", "editor.ts", "code.ts"]
 }

@@ -5,9 +5,9 @@
 *{box-sizing:border-box}body{margin:0;padding:20px;font:12px/1.5 Inter,system-ui,sans-serif;color:var(--figma-color-text,#222);background:var(--figma-color-bg,#fff)}h1{font-size:23px;letter-spacing:-.7px;margin:0}h2{font-size:14px;margin:20px 0 8px}p{color:var(--figma-color-text-secondary,#777);margin:8px 0}label{display:block;margin:14px 0 5px;font-weight:600}input,textarea,select,button{font:inherit;border-radius:7px;border:1px solid var(--figma-color-border,#ddd);padding:9px;color:inherit;background:var(--figma-color-bg,#fff)}input:not([type=checkbox]),select,textarea{width:100%}textarea{resize:vertical;min-height:80px}.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}.primary{background:#6654e8;border-color:#6654e8;color:white}.actions{margin:12px 0}.danger{color:var(--figma-color-text-danger,#bd3341)}#status{padding:10px;margin:12px 0;background:var(--figma-color-bg-secondary,#f5f5f7);border-radius:7px;overflow-wrap:anywhere}#status[data-error=true]{color:var(--figma-color-text-danger,#c33)}.tag{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--figma-color-text-secondary,#777);margin-bottom:5px}.tabs{display:flex;gap:8px;margin-top:16px}.tabs button{flex:1}.tabs button[data-active=true]{background:#6654e8;color:white;border-color:#6654e8}[hidden]{display:none!important}.small{font-size:11px}.move button{font-size:16px;padding:6px}.section{border-top:1px solid var(--figma-color-border,#ddd);margin-top:16px;padding-top:2px}
 </style>
 <body>
-<div class="tag">Итерация 3C · работа со сценой</div>
+<div class="tag">Итерация 4 · цветовые схемы</div>
 <h1>Ochen Composer</h1>
-<div class="tabs"><button id="tab-build" data-active="true">Сборка</button><button id="tab-edit" data-active="false">Правка</button></div>
+<div class="tabs"><button id="tab-build" data-active="true">Сборка</button><button id="tab-edit" data-active="false">Правка</button><button id="tab-palette" data-active="false">Палитра</button></div>
 <div id="status" role="status" aria-live="polite">Подготовка библиотеки…</div>
 <section id="build-panel">
 <label for="query">Что должно быть в композиции</label>
@@ -18,12 +18,14 @@
 <label for="state-mode">Состояния при сборке</label>
 <select id="state-mode"><option value="color">Цветные предметы</option><option value="mixed">Смешанные: часть акцентов монохромные</option><option value="mono">Все предметы монохромные</option></select>
 <label style="font-weight:400"><input type="checkbox" id="background-duplicate" checked> Фоновый дубль первого предмета</label>
+<p>Палитра новой сцены: <strong id="build-palette-name">Фиолетовая</strong>. <button id="choose-palette" style="padding:3px 7px">Выбрать</button></p>
 <div class="row actions"><button id="compose" class="primary" disabled>Собрать</button><button id="variant" disabled>Новый вариант</button></div>
 <p class="small">До 8 предметов через запятую или перенос строки. Повтор названия добавляет экземпляр. Повороты автоматические; у лампы и цветов угол 0°. Масштаб сцены общий.</p>
 <p class="small">Новый вариант увеличивает seed и создаёт отдельный фрейм. Для сцены без монохромных предметов выберите «Цветные» и отключите дубль.</p>
 </section>
 <section id="edit-panel" hidden>
 <p id="scene-name">Выберите композицию или её предмет в Figma.</p>
+<p id="scene-palette-name" class="small"></p>
 <h2>Выбранный предмет</h2>
 <p id="selected-asset">Выберите один предмет композиции в Figma.</p>
 <div class="row actions"><button id="state-main" disabled>Цветной</button><button id="state-background" disabled>Монохромный</button></div>
@@ -37,25 +39,83 @@
 <div class="row actions"><button id="add" disabled>Добавить предмет</button></div>
 <p class="small">L/S и масштаб берутся из сцены. Если свободного места нет, команда отменяется. Вложенные пользовательские группы сначала разгруппируйте до уровня композиции.</p>
 </div></section>
+<section id="palette-panel" hidden>
+<h2>Цветовая схема</h2>
+<label for="palette-select">Для следующей сборки или выбранной сцены</label>
+<select id="palette-select"></select>
+<div id="palette-swatches" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px"></div>
+<p id="palette-warnings" class="small"></p>
+<button id="apply-palette" class="primary" style="width:100%;margin-top:14px" disabled>Применить к выбранной композиции</button>
+<p id="palette-target" class="small">Выберите композицию или один её предмет в Figma.</p>
+<p class="small">Выбор схемы задаёт цвета новой сборки. Кнопка перекрашивает только выбранную композицию, сохраняя предметы, позиции, углы и слои. Ручные цвета заменяются исходными цветовыми ролями.</p>
+<div class="section"><h2>Загрузить свою палитру</h2>
+<p>JSON с восемью подписанными ролями. Загрузите пример, измените HEX и импортируйте файл с новым id.</p>
+<button id="palette-example" style="width:100%">Скачать JSON-пример</button>
+<label for="palette-file">Файл палитры · до 32 КБ</label>
+<input id="palette-file" type="file" accept=".json,application/json">
+<p class="small">surface / mid / deep / paper доступны фону и предметам. accentLight / accentStrong / accentSoft / ink — только цветным предметам. Связанные стили, переменные и неизвестные цвета без сохранённых ролей требуют возврата к исходной структуре.</p>
+<p class="small">До 10 личных схем сохраняются в настройках плагина. Палитра композиции хранится также внутри документа; после перезапуска её можно продолжать использовать. Повторный импорт того же личного id обновляет запись, не перекрашивая старые сцены.</p>
+</div>
+</section>
 <script>
 const el=id=>document.getElementById(id);
 let ready=false,busy=false,selectedAsset=null,selectedScene=null;
+let paletteEntries=[],chosenPaletteKey='builtin:violet';
 function send(message){parent.postMessage({pluginMessage:message},'*')}
-function tab(name){el('build-panel').hidden=name!=='build';el('edit-panel').hidden=name!=='edit';el('tab-build').dataset.active=String(name==='build');el('tab-edit').dataset.active=String(name==='edit')}
+function tab(name){['build','edit','palette'].forEach(id=>{el(id+'-panel').hidden=name!==id;el('tab-'+id).dataset.active=String(name===id)})}
 el('tab-build').onclick=()=>tab('build');el('tab-edit').onclick=()=>tab('edit');
+el('tab-palette').onclick=()=>tab('palette');el('choose-palette').onclick=()=>tab('palette');
+function samePalette(a,b){return a&&b&&a.id===b.id&&a.version===b.version&&JSON.stringify(a.colors)===JSON.stringify(b.colors)}
+function paletteOptions(){const entries=[...paletteEntries];if(selectedScene?.palette&&!entries.some(e=>samePalette(e.palette,selectedScene.palette)))entries.push({key:'document',palette:selectedScene.palette,warnings:selectedScene.paletteWarnings||[]});return entries}
+function currentPalette(){return paletteOptions().find(e=>e.key===chosenPaletteKey)?.palette}
+function renderPalettes(preferred){
+ const entries=paletteOptions();
+ if(preferred)chosenPaletteKey=preferred;
+ if(!entries.some(e=>e.key===chosenPaletteKey))chosenPaletteKey=entries.find(e=>samePalette(e.palette,selectedScene?.palette))?.key||entries[0]?.key||'builtin:violet';
+ el('palette-select').replaceChildren();
+ entries.forEach(entry=>{const option=document.createElement('option');option.value=entry.key;option.textContent=entry.palette.name+(entry.key==='document'?' · из документа':entry.key.startsWith('custom:')?' · личная':'');el('palette-select').appendChild(option)});
+ el('palette-select').value=chosenPaletteKey;
+ const selected=entries.find(e=>e.key===chosenPaletteKey);el('palette-swatches').replaceChildren();
+ if(selected)Object.entries(selected.palette.colors).forEach(([role,hex])=>{
+  const card=document.createElement('div');card.style.cssText='display:flex;gap:7px;align-items:center;padding:7px;border:1px solid var(--figma-color-border,#ddd);border-radius:6px';
+  const swatch=document.createElement('span');swatch.style.cssText='display:block;width:23px;height:30px;border:1px solid #aaa;border-radius:4px;flex-shrink:0';swatch.style.background=hex;
+  const label=document.createElement('span');label.textContent=role+' '+hex;label.style.fontSize='10px';card.appendChild(swatch);card.appendChild(label);el('palette-swatches').appendChild(card);
+ });
+ el('build-palette-name').textContent=selected?.palette.name||'Загружается…';
+ el('palette-warnings').textContent=(selected?.warnings||[]).join(' ');
+ el('palette-target').textContent=selectedScene?(selectedScene.paletteError||'Выбрана: '+selectedScene.name+' · текущая схема: '+(selectedScene.palette?.name||'не определена')):'Выберите композицию или один её предмет в Figma.';
+ update();
+}
+el('palette-select').onchange=()=>{chosenPaletteKey=el('palette-select').value;renderPalettes()};
+el('apply-palette').onclick=()=>{busy=true;update();el('status').dataset.error='false';el('status').textContent='Перекрашиваем выбранную композицию…';send({type:'apply-palette',palette:currentPalette()})};
+el('palette-example').onclick=()=>{
+ const source=paletteEntries.find(e=>e.key==='builtin:violet')?.palette;if(!source)return;
+ const example={...source,id:'my-palette',name:'Моя палитра',version:1};
+ const url=URL.createObjectURL(new Blob([JSON.stringify(example,null,2)],{type:'application/json'}));
+ const link=document.createElement('a');link.href=url;link.download='ochen-palette.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+el('palette-file').onchange=async()=>{
+ const file=el('palette-file').files?.[0];if(!file)return;
+ busy=true;update();el('status').dataset.error='false';el('status').textContent='Загружаем палитру…';
+ try{if(file.size>32768)throw new Error('Файл палитры должен быть не больше 32 КБ.');const palette=JSON.parse(await file.text());send({type:'import-palette',palette});}
+ catch(error){busy=false;update();el('status').dataset.error='true';el('status').textContent=error instanceof SyntaxError?'Не удалось прочитать JSON. Используйте файл-пример.':error.message;}
+ finally{el('palette-file').value='';}
+};
 function update(){
  const disabled=!ready||busy||!el('query').value.trim();el('compose').disabled=disabled;el('variant').disabled=disabled;
  el('state-main').disabled=busy||!selectedAsset||selectedAsset.state==='main';
  el('state-background').disabled=busy||!selectedAsset||selectedAsset.state==='background';
  el('add').disabled=busy||!selectedScene||!el('add-name').value.trim();
  ['move-left','move-up','move-down','move-right','rotate','duplicate','delete','raise','lower'].forEach(id=>el(id).disabled=busy||!selectedAsset);
+ el('apply-palette').disabled=busy||!selectedScene||!currentPalette();el('palette-file').disabled=busy;
+ el('palette-example').disabled=busy||!paletteEntries.length;el('palette-select').disabled=busy||!paletteEntries.length;
 }
 el('query').oninput=update;
 function compose(next){
  let seed=Number(el('seed').value);
  if(!el('seed').value.trim()||!Number.isInteger(seed)||seed<0||seed>2147483647){el('status').textContent='Seed: целое число от 0 до 2147483647.';el('status').dataset.error='true';return}
  if(next)seed=seed===2147483647?0:seed+1;el('seed').value=String(seed);busy=true;update();el('status').textContent='Собираем композицию…';el('status').dataset.error='false';
- send({type:'compose',text:el('query').value,format:el('format').value,size:el('size').value,backgroundDuplicate:el('background-duplicate').checked,template:el('template').value,seed,stateMode:el('state-mode').value});
+ send({type:'compose',text:el('query').value,format:el('format').value,size:el('size').value,backgroundDuplicate:el('background-duplicate').checked,template:el('template').value,seed,stateMode:el('state-mode').value,palette:currentPalette()});
 }
 el('compose').onclick=()=>compose(false);el('variant').onclick=()=>compose(true);
 function setState(state){busy=true;update();send({type:'set-state',state})}
@@ -69,12 +129,17 @@ window.onmessage=event=>{
  const msg=event.data.pluginMessage;if(!msg||typeof msg.type!=='string')return;
  if(msg.type==='catalog'){ready=true;el('catalog').textContent='Доступны: '+msg.names.join(', ')+'.';el('status').textContent='Библиотека готова.';update()}
  if(msg.type==='busy'){busy=msg.value;update()}
+ if(msg.type==='palettes'){paletteEntries=msg.entries;renderPalettes(msg.selectedKey)}
+ if(msg.type==='palette-notice'){el('status').textContent=msg.message;el('status').dataset.error='true'}
  if(msg.type==='asset-selection'){
-  const previousId=selectedAsset?.instanceId;selectedAsset=msg.selected;selectedScene=msg.scene||null;
+  const previousId=selectedAsset?.instanceId,previousSceneId=selectedScene?.id;selectedAsset=msg.selected;selectedScene=msg.scene||null;
   el('scene-name').textContent=selectedScene?selectedScene.name+' · экземпляров: '+selectedScene.count:'Выберите композицию или её предмет в Figma.';
   el('selected-asset').textContent=selectedAsset?selectedAsset.name+' · '+(selectedAsset.state==='main'?'цветной':'монохромный'):'Выберите один предмет композиции в Figma.';
+  el('scene-palette-name').textContent=selectedScene?.palette?'Палитра: '+selectedScene.palette.name:(selectedScene?.paletteError||'');
   if(selectedAsset&&Number.isFinite(selectedAsset.angle))el('edit-angle').value=String(Math.round(selectedAsset.angle*100)/100);
-  if(selectedAsset?.instanceId&&selectedAsset.instanceId!==previousId)tab('edit');update();
+  if(selectedAsset?.instanceId&&selectedAsset.instanceId!==previousId)tab('edit');
+  const preferred=selectedScene?.palette&&selectedScene.id!==previousSceneId?paletteOptions().find(e=>samePalette(e.palette,selectedScene.palette))?.key:undefined;
+  renderPalettes(preferred);update();
  }
  if(msg.type==='error'||msg.type==='success'){el('status').textContent=msg.message;el('status').dataset.error=String(msg.type==='error')}
 };

@@ -39,6 +39,12 @@ module.exports = tseslint.config(
     },
   },
   {
+    files: ['palette-core.ts','palette-figma.ts','palette-registry.ts'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error',{varsIgnorePattern:'^(validatePalette|paletteWarnings|mapPalettePaints|getScenePalette|recolorTree|applyScenePalette|sendPaletteCatalog|loadPersonalPalettes|requestedPalette|importPersonalPalette)$'}],
+    },
+  },
+  {
     ignores: ['code.js', 'out/**', 'generated/**', 'scripts/**', 'tests/**', 'dist', 'eslint.config.js'],
   },
 )
