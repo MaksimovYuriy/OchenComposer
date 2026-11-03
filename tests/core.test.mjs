@@ -25,7 +25,7 @@ test('Layouts keep 1–8 objects inside each canvas with uniform scales', () => 
   for (const [width, height] of [[1000, 1000], [1200, 630], [800, 1200]]) {
     for (let count = 1; count <= 8; count++) {
       const selected = Array.from({ length: count }, (_, i) => assets[i % assets.length]);
-      const layout = context.layoutObjects(selected, width, height);
+      const layout = context.composeScene(selected, [], false, width, height, 'auto', 0).placements;
       assert.equal(layout.length, count);
       for (const p of layout) {
         assert.ok(p.scale > 0);
@@ -33,14 +33,14 @@ test('Layouts keep 1–8 objects inside each canvas with uniform scales', () => 
         assert.ok(p.x + p.asset.width * p.scale <= width);
         assert.ok(p.y + p.asset.height * p.scale <= height);
       }
-      assert.equal(JSON.stringify(layout), JSON.stringify(context.layoutObjects(selected, width, height)));
+      assert.equal(JSON.stringify(layout), JSON.stringify(context.composeScene(selected, [], false, width, height, 'auto', 0).placements));
     }
   }
 });
 test('Invalid geometry is rejected', () => {
-  assert.throws(() => context.layoutObjects([], 1000, 1000));
-  assert.throws(() => context.layoutObjects(assets, NaN, 1000));
-  assert.throws(() => context.layoutObjects([{ ...assets[0], width: 0 }], 1000, 1000));
+  assert.throws(() => context.composeScene([], [], false, 1000, 1000, 'auto', 0));
+  assert.throws(() => context.composeScene(assets, [], false, NaN, 1000, 'auto', 0));
+  assert.throws(() => context.composeScene([{ ...assets[0], width: 0 }], [], false, 1000, 1000, 'auto', 0));
 });
 
 function realAssets(folder, role, size) {
@@ -59,7 +59,7 @@ test('Square hero: all real variants, 1–8 objects, complete membership and no 
     for (let start = 0; start < main.length; start++) {
       for (let count = 1; count <= 8; count++) {
         const selected = Array.from({ length: count }, (_, i) => main[(start + i) % main.length]);
-        const scene = context.composeSquare(selected, background, true);
+        const scene = context.composeScene(selected, background, true, 1000, 1000, 'diagonal', 0).placements;
         assert.equal(scene[0].role, 'background');
         assert.equal(scene[0].asset.id, selected[0].id);
         const foreground = scene.filter(p => p.role !== 'background');
@@ -82,12 +82,12 @@ test('Square hero: all real variants, 1–8 objects, complete membership and no 
 
 test('Background is optional; duplicates remain explicit foreground instances', () => {
   const main = realAssets('mainground', 'main', 'large');
-  const scene = context.composeSquare([main[0], main[0]], [], false);
+  const scene = context.composeScene([main[0], main[0]], [], false, 1000, 1000, 'diagonal', 0).placements;
   assert.equal(scene.length, 2);
   assert.equal(scene[0].asset, scene[1].asset);
   assert.ok(scene.every(p => p.role !== 'background'));
-  assert.throws(() => context.composeSquare([main[0]], [], true), /фоновый вариант/);
-  assert.throws(() => context.composeSquare([], [], false));
+  assert.throws(() => context.composeScene([main[0]], [], true, 1000, 1000, 'diagonal', 0), /фоновый вариант/);
+  assert.throws(() => context.composeScene([], [], false, 1000, 1000, 'diagonal', 0));
 });
 
 test('All templates preserve real foreground membership, bounds and separation in every format', () => {
@@ -102,6 +102,7 @@ test('All templates preserve real foreground membership, bounds and separation i
               const selected = Array.from({ length: count }, (_, i) => main[(start+i)%main.length]);
               const plan = context.composeScene(selected, background, true, width, height, template, seed);
               const foreground = plan.placements.filter(p => p.role !== 'background');
+              assert.equal(new Set(plan.placements.map(p=>p.scale)).size,1,'Every original and duplicate must use the same scene scale');
               assert.deepEqual(Array.from(foreground,p=>p.asset.id),selected.map(a=>a.id));
               assert.equal(foreground[0].role,'main');
               assert.equal(plan.placements[0].role,'background');
@@ -130,4 +131,13 @@ test('Seed reproduces the scene; next variants change the layout without changin
   for(const template of ['diagonal','focus','terrace'])assert.notEqual(JSON.stringify(make(0,template)),JSON.stringify(make(1,template)));
   for(const seed of [-1,NaN,1.5,2147483648])assert.throws(()=>make(seed));
   assert.throws(()=>make(0,'unknown'));
+});
+
+test('State replacement preserves local size and rejects unknown proportions or mismatched variants',()=>{
+  const source={...assets[0],size:'large'};
+  const target={...source,role:'background'};
+  assert.ok(Math.abs(context.stateReplacementScale(source,target,source.width*.4,source.height*.4)-.4)<1e-12);
+  assert.throws(()=>context.stateReplacementScale(source,target,source.width*.4,source.height*.5),/растянут/);
+  assert.throws(()=>context.stateReplacementScale(source,{...target,width:100},100,100));
+  assert.throws(()=>context.stateReplacementScale(source,{...target,id:'other'},100,100));
 });

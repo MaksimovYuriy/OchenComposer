@@ -1,11 +1,88 @@
 figma.showUI(__html__, { width: 440, height: 700, themeColors: true });
 let busy = false;
 let previousResult: FrameNode | undefined;
+function selectedAssetNode(): FrameNode | undefined {
+  if (figma.currentPage.selection.length !== 1) return;
+  let node: BaseNode | null = figma.currentPage.selection[0];
+  while (node && node.type !== 'PAGE' && node.type !== 'DOCUMENT') {
+    if (node.type === 'FRAME' && node.getPluginData('ochen-asset-id')) {
+      let ancestor = node.parent;
+      while (ancestor && ancestor.type !== 'DOCUMENT') {
+        if (ancestor.getPluginData('ochen-composition') === '1') return node;
+        ancestor = ancestor.parent;
+      }
+      return;
+    }
+    node = node.parent;
+  }
+}
+
+function sendSelectionState(): void {
+  const node = selectedAssetNode();
+  figma.ui.postMessage({ type: 'asset-selection', selected: node ? {
+    name: node.name, state: node.getPluginData('ochen-state') || (node.getPluginData('ochen-role') === 'background' ? 'background' : 'main'),
+  } : null });
+}
+
+function changeSelectedState(state: unknown): void {
+  if (state !== 'main' && state !== 'background') throw new Error('Неизвестное состояние предмета.');
+  const source = selectedAssetNode();
+  if (!source) throw new Error('Выберите один предмет созданной композиции (можно выбрать его деталь).');
+  const id = source.getPluginData('ochen-asset-id');
+  const size = source.getPluginData('ochen-variant');
+  const oldState = source.getPluginData('ochen-state') || (source.getPluginData('ochen-role') === 'background' ? 'background' : 'main');
+  if (oldState === state) return;
+  const oldAsset = ASSETS.find(a => a.id === id && a.size === size && a.role === oldState);
+  const newAsset = ASSETS.find(a => a.id === id && a.size === size && a.role === state);
+  if (!oldAsset || !newAsset) throw new Error('Не найдены исходные состояния предмета.');
+  const scale = stateReplacementScale(oldAsset, newAsset, source.width, source.height);
+  const parent = source.parent;
+  if (!parent || !('insertChild' in parent) || parent.type === 'INSTANCE') throw new Error('Нельзя заменить предмет в этом контейнере.');
+  const index = parent.children.indexOf(source);
+  const transform: Transform = [[...source.relativeTransform[0]], [...source.relativeTransform[1]]];
+  let replacement: FrameNode | undefined;
+  try {
+    replacement = figma.createNodeFromSvg(newAsset.svg);
+    replacement.rescale(scale);
+    parent.insertChild(index, replacement);
+    replacement.relativeTransform = transform;
+    replacement.name = `${newAsset.name}${state === 'background' ? ' — монохромный' : ''}${source.getPluginData('ochen-role') === 'background' ? ' (дубль)' : ''}`;
+    for (const key of source.getPluginDataKeys()) replacement.setPluginData(key, source.getPluginData(key));
+    replacement.setPluginData('ochen-state', state);
+    replacement.opacity = source.opacity;
+    replacement.blendMode = source.blendMode;
+    replacement.visible = source.visible;
+    replacement.locked = source.locked;
+    figma.currentPage.selection = [replacement];
+    source.remove();
+  } catch (error) {
+    if (replacement && !replacement.removed) replacement.remove();
+    throw error;
+  }
+}
+
+figma.on('selectionchange', sendSelectionState);
 figma.ui.onmessage = (message: unknown) => {
   if (!message || typeof message !== 'object' || !('type' in message)) return;
   const request = message as Record<string, unknown>;
   if (request.type === 'catalog') {
     figma.ui.postMessage({ type: 'catalog', names: ASSETS.filter(a => a.role === 'main' && a.size === 'large').map(a => a.name) });
+    sendSelectionState();
+    return;
+  }
+  if (request.type === 'set-state' && !busy) {
+    busy = true;
+    figma.ui.postMessage({ type: 'busy', value: true });
+    try {
+      changeSelectedState(request.state);
+      figma.ui.postMessage({ type: 'success', message: 'Состояние применено. Положение, поворот, размер и порядок слоёв сохранены.' });
+    } catch (error) {
+      figma.ui.postMessage({ type: 'error', message: error instanceof Error ? error.message : 'Не удалось изменить состояние.' });
+    } finally {
+      busy = false;
+      figma.ui.postMessage({ type: 'busy', value: false });
+      sendSelectionState();
+    }
     return;
   }
   if (request.type !== 'compose' || busy) return;
@@ -74,6 +151,7 @@ figma.ui.onmessage = (message: unknown) => {
       node.setPluginData('ochen-asset-id', placement.asset.id);
       node.setPluginData('ochen-variant', placement.asset.size);
       node.setPluginData('ochen-role', placement.role);
+      node.setPluginData('ochen-state', placement.asset.role);
       node.rescale(placement.scale);
       node.x = placement.x;
       node.y = placement.y;

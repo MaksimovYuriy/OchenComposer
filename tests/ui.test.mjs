@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 function panel() {
-  const elements = Object.fromEntries(['compose','variant','query','format','size','template','seed','status','catalog','background-duplicate']
+  const elements = Object.fromEntries(['compose','variant','query','format','size','template','seed','status','catalog','background-duplicate','state-main','state-background','selected-asset']
     .map(id=>[id,{value:'',dataset:{},disabled:false,checked:true}]));
   Object.assign(elements.query,{value:'Книга, телефон, монета'});
   elements.format.value='portrait';elements.size.value='small';elements.template.value='auto';elements.seed.value='0';
@@ -43,4 +43,18 @@ test('Invalid seed never sends a composition request; max seed wraps explicitly'
   elements.seed.value='2147483647';elements.variant.onclick();
   assert.equal(messages.at(-1).seed,0);
   receive({type:'busy',value:false});
+});
+
+test('State controls follow the selected instance and never add a composition request',()=>{
+  const {elements,messages,receive}=panel();
+  assert.equal(elements['state-main'].disabled,true);
+  receive({type:'asset-selection',selected:{name:'Книга',state:'main'}});
+  assert.equal(elements['state-main'].disabled,true);
+  assert.equal(elements['state-background'].disabled,false);
+  elements['state-background'].onclick();
+  assert.equal(messages.at(-1).type,'set-state');
+  assert.equal(messages.at(-1).state,'background');
+  receive({type:'busy',value:false});
+  receive({type:'asset-selection',selected:null});
+  assert.equal(elements['state-background'].disabled,true);
 });

@@ -19,16 +19,10 @@ function composeScene(assets: Asset[], backgrounds: Asset[], duplicate: boolean,
   const chosen = template === 'auto' ? templates[seed % 3] : template as TemplateId;
   let state = (seed + 1) >>> 0;
   const random = () => { state = (Math.imul(1664525, state) + 1013904223) >>> 0; return state / 4294967296; };
-  const result: ScenePlacement[] = [];
+  const pending: { asset: Asset; role: ScenePlacement['role']; zone: Zone }[] = [];
   function fit(asset: Asset, role: ScenePlacement['role'], zone: Zone): void {
     if (![asset.width, asset.height].every(v => Number.isFinite(v) && v > 0)) throw new Error('Некорректные размеры предмета.');
-    const factor = .92 + random() * .06;
-    const scale = Math.min(zone.w * width / asset.width, zone.h * height / asset.height) * factor;
-    const remainingW = zone.w * width - asset.width * scale;
-    const remainingH = zone.h * height - asset.height * scale;
-    result.push({ asset, role, order: result.length, scale,
-      x: zone.x * width + remainingW * (.35 + random() * .30),
-      y: zone.y * height + remainingH * (.35 + random() * .30) });
+    pending.push({ asset, role, zone });
   }
   if (duplicate) {
     const background = backgrounds.find(a => a.id === assets[0].id && a.size === assets[0].size);
@@ -40,9 +34,17 @@ function composeScene(assets: Asset[], backgrounds: Asset[], duplicate: boolean,
   let supports: Zone[] = [];
   const count = assets.length - 1;
   function strip(zone: Zone, horizontal: boolean): Zone[] {
-    return Array.from({ length: count }, (_, i) => horizontal
-      ? { x: zone.x + zone.w * i / count, y: zone.y, w: zone.w / count * .90, h: zone.h }
-      : { x: zone.x, y: zone.y + zone.h * i / count, w: zone.w, h: zone.h / count * .90 });
+    const weights = assets.slice(1).map(a => horizontal ? a.width : a.height);
+    const sum = weights.reduce((total, value) => total + value, 0);
+    let offset = 0;
+    return weights.map(weight => {
+      const share = weight / sum;
+      const slot = horizontal
+        ? { x: zone.x + zone.w * offset, y: zone.y, w: zone.w * share * .90, h: zone.h }
+        : { x: zone.x, y: zone.y + zone.h * offset, w: zone.w, h: zone.h * share * .90 };
+      offset += share;
+      return slot;
+    });
   }
   if (!count) {
     hero = chosen === 'terrace' ? { x: .13, y: .08, w: .76, h: .73 }
@@ -73,37 +75,32 @@ function composeScene(assets: Asset[], backgrounds: Asset[], duplicate: boolean,
     supports = strip({ x: .69, y: .08, w: .25, h: .84 }, false);
   }
   fit(assets[0], 'main', hero);
-  assets.slice(1).forEach((asset, index) => fit(asset, 'support', supports[(index + seed % count) % count]));
-  return { template: chosen, seed, placements: result };
+  assets.slice(1).forEach((asset, index) => fit(asset, 'support', supports[index]));
+  // Exported at 1x from the original library (confirmed by the owner).
+  // Preserve relative dimensions: one scale for every foreground and background instance.
+  const scale = Math.min(...pending.filter(p => p.role !== 'background').map(({asset,zone}) => Math.min(zone.w * width / asset.width, zone.h * height / asset.height)))
+    * (.92 + random() * .06);
+  const placements = pending.map(({asset,role,zone},order) => {
+    const remainingW = zone.w * width - asset.width * scale;
+    const remainingH = zone.h * height - asset.height * scale;
+    const x = zone.x * width + remainingW * (.35 + random() * .30);
+    const y = zone.y * height + remainingH * (.35 + random() * .30);
+    return { asset, role, order, scale,
+      x: Math.max(0, Math.min(width - asset.width * scale, x)),
+      y: Math.max(0, Math.min(height - asset.height * scale, y)) };
+  });
+  return { template: chosen, seed, placements };
 }
 
-// Hero below/left, accents above/right; foreground fit rectangles do not overlap.
-function composeSquare(assets: Asset[], backgrounds: Asset[], duplicate: boolean): ScenePlacement[] {
-  if (!assets.length || assets.length > 8) throw new Error('Допустимо от 1 до 8 предметов.');
-  const result: ScenePlacement[] = [];
-  function fit(asset: Asset, role: ScenePlacement['role'], cx: number, cy: number, w: number, h: number): void {
-    if (![asset.width, asset.height].every(v => Number.isFinite(v) && v > 0)) throw new Error('Некорректные размеры предмета.');
-    const scale = Math.min(w / asset.width, h / asset.height);
-    result.push({ asset, role, order: result.length, scale, x: cx - asset.width * scale / 2, y: cy - asset.height * scale / 2 });
+function stateReplacementScale(source: Asset, target: Asset, width: number, height: number): number {
+  if (source.id !== target.id || source.size !== target.size || source.width !== target.width || source.height !== target.height) {
+    throw new Error('Варианты предмета не имеют подтверждённого общего размера.');
   }
-  if (duplicate) {
-    const background = backgrounds.find(a => a.id === assets[0].id && a.size === assets[0].size);
-    if (!background) throw new Error('Не найден фоновый вариант главного предмета.');
-    fit(background, 'background', 270, 250, 440, 380);
+  const scale = width / source.width;
+  if (!Number.isFinite(scale) || scale <= 0 || Math.abs(height - source.height * scale) > Math.max(.1, height * .001)) {
+    throw new Error('Предмет растянут по осям. Восстановите его пропорции перед переключением.');
   }
-  if (assets.length === 1) {
-    fit(assets[0], 'main', 540, 590, 780, 660);
-  } else if (assets.length <= 3) {
-    fit(assets[0], 'main', assets.length === 2 ? 440 : 360, 640, assets.length === 2 ? 720 : 600, 560);
-    fit(assets[1], 'support', 710, 220, 440, 280);
-    if (assets[2]) fit(assets[2], 'support', 830, 730, 220, 260);
-  } else {
-    fit(assets[0], 'main', 340, 600, 560, 640);
-    const count = assets.length - 1;
-    const slot = 840 / count;
-    assets.slice(1).forEach((asset, index) => fit(asset, 'support', 805, 80 + slot * (index + .5), 250, slot * .80));
-  }
-  return result;
+  return scale;
 }
 
 function normalizeName(value: string): string {
@@ -128,26 +125,4 @@ function resolveNames(text: string, assets: Asset[]): Asset[] {
   }
   if (missing.length) throw new Error(`Не удалось выбрать: ${missing.join(', ')}. Доступны: ${assets.map(asset => asset.name).join(', ')}.`);
   return result;
-}
-
-// A conservative first layout; reference-based composition templates follow later.
-function layoutObjects(assets: Asset[], width: number, height: number): Placement[] {
-  if (!assets.length || assets.length > 8) throw new Error('Некорректное число предметов.');
-  if (![width, height].every(value => Number.isFinite(value) && value >= 300 && value <= 2000)) {
-    throw new Error('Недопустимый размер холста.');
-  }
-  const columns = Math.ceil(Math.sqrt(assets.length * width / height));
-  const rows = Math.ceil(assets.length / columns);
-  const margin = 60;
-  const cellW = (width - margin * 2) / columns;
-  const cellH = (height - margin * 2) / rows;
-  return assets.map((asset, index) => {
-    if (![asset.width, asset.height].every(value => Number.isFinite(value) && value > 0)) throw new Error('Некорректные размеры предмета.');
-    const scale = Math.min(cellW * .82 / asset.width, cellH * .82 / asset.height);
-    const row = Math.floor(index / columns);
-    const inRow = Math.min(columns, assets.length - row * columns);
-    return { asset, scale,
-      x: margin + (columns - inRow) * cellW / 2 + (index % columns) * cellW + (cellW - asset.width * scale) / 2,
-      y: margin + row * cellH + (cellH - asset.height * scale) / 2 };
-  });
 }

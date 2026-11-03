@@ -19,7 +19,7 @@ for (const [folder, role] of [['mainground', 'main'], ['background', 'background
       const source = `${directory}/${file}`;
       const svg = await readFile(new URL(`../${source}`, import.meta.url), 'utf8');
       const box = svg.match(/viewBox="([^"]+)"/)?.[1].trim().split(/[\s,]+/).map(Number);
-      if (!box || box.length !== 4 || !box.every(Number.isFinite) || box[2] <= 0 || box[3] <= 0) {
+      if (!box || box.length !== 4 || !box.every(Number.isFinite) || box[0] !== 0 || box[1] !== 0 || box[2] <= 0 || box[3] <= 0) {
         throw new Error(`Некорректный viewBox: ${source}`);
       }
       if (/<(?:image|script|foreignObject)\b|\bon\w+\s*=|(?:href\s*=\s*["'](?!#))|url\(\s*["']?(?!#)[a-z]/i.test(svg)) {
@@ -35,6 +35,11 @@ for (const [folder, role] of [['mainground', 'main'], ['background', 'background
 }
 for (const id of Object.values(names)) {
   if (assets.filter(asset => asset.id === id).length !== 4) throw new Error(`Неполный комплект вариантов: ${id}`);
+  for (const size of ['large', 'small']) {
+    const main = assets.find(a => a.id === id && a.size === size && a.role === 'main');
+    const background = assets.find(a => a.id === id && a.size === size && a.role === 'background');
+    if (main.width !== background.width || main.height !== background.height) throw new Error(`Размеры состояний различаются: ${id}/${size}`);
+  }
 }
 await mkdir(new URL('../generated/', import.meta.url), { recursive: true });
 const backdrops = [];

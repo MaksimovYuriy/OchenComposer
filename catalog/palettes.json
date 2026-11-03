@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "roles": {
+    "surface": { "areas": ["background", "monochrome", "object"] },
+    "mid": { "areas": ["background", "monochrome", "object"] },
+    "deep": { "areas": ["background", "monochrome", "object"] },
+    "accentLight": { "areas": ["object"] },
+    "accentStrong": { "areas": ["object"] },
+    "accentSoft": { "areas": ["object"] },
+    "ink": { "areas": ["object"] },
+    "paper": { "areas": ["background", "monochrome", "object"] }
+  },
+  "palettes": [
+    {
+      "id": "violet", "name": "Фиолетовая", "version": 1,
+      "source": "assets/colors/large/Group 2136136332.svg",
+      "colors": { "surface": "#D7CDF5", "mid": "#AA9BF0", "deep": "#7864D7", "accentLight": "#F9ECB0", "accentStrong": "#F9A3AA", "accentSoft": "#FFE3E1", "ink": "#181817", "paper": "#FFFFFF" }
+    },
+    {
+      "id": "orange", "name": "Оранжевая", "version": 1,
+      "source": "assets/colors/large/Group 2136136333.svg",
+      "colors": { "surface": "#FDD7B9", "mid": "#FAC896", "deep": "#D27532", "accentLight": "#F9ECB0", "accentStrong": "#80DADA", "accentSoft": "#BEEBEB", "ink": "#181817", "paper": "#FFFFFF" }
+    },
+    {
+      "id": "turquoise", "name": "Бирюзовая", "version": 1,
+      "source": "assets/colors/large/Group 2136136334.svg",
+      "colors": { "surface": "#BEEBEB", "mid": "#80DADA", "deep": "#5ABEBE", "accentLight": "#FFD4F2", "accentStrong": "#6D7BFC", "accentSoft": "#B6C6FE", "ink": "#181817", "paper": "#FFFFFF" }
+    }
+  ]
+}

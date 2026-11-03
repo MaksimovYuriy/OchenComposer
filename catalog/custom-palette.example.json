@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "custom-violet",
+  "name": "Моя палитра",
+  "version": 1,
+  "colors": {
+    "surface": "#D7CDF5",
+    "mid": "#AA9BF0",
+    "deep": "#7864D7",
+    "accentLight": "#F9ECB0",
+    "accentStrong": "#F9A3AA",
+    "accentSoft": "#FFE3E1",
+    "ink": "#181817",
+    "paper": "#FFFFFF"
+  }
+}
