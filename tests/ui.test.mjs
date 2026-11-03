@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 function panel() {
-  const elements = Object.fromEntries(['compose','variant','query','format','size','template','seed','status','catalog','background-duplicate','state-main','state-background','selected-asset','state-mode']
+  const elements = Object.fromEntries(['compose','variant','query','format','size','template','seed','status','catalog','background-duplicate','state-main','state-background','selected-asset','state-mode','scene-name','add-name','add-state','add','move-left','move-right','move-up','move-down','edit-angle','rotate','duplicate','delete','raise','lower','tab-build','tab-edit','build-panel','edit-panel']
     .map(id=>[id,{value:'',dataset:{},disabled:false,checked:true}]));
   Object.assign(elements.query,{value:'Книга, телефон, монета'});
   elements.format.value='portrait';elements.size.value='small';elements.template.value='auto';elements.seed.value='0';
@@ -58,4 +58,21 @@ test('State controls follow the selected instance and never add a composition re
   receive({type:'busy',value:false});
   receive({type:'asset-selection',selected:null});
   assert.equal(elements['state-background'].disabled,true);
+});
+
+test('Editing tab sends bounded commands for the selected scene and clears after losing selection',()=>{
+  const {elements,messages,receive}=panel();
+  receive({type:'asset-selection',selected:{instanceId:'item-1',name:'Книга',state:'main',angle:8},scene:{name:'Сцена',count:3}});
+  assert.equal(elements['edit-panel'].hidden,false);
+  assert.equal(elements['edit-angle'].value,'8');
+  elements['move-right'].onclick();
+  assert.equal(messages.at(-1).action,'move');assert.equal(messages.at(-1).dx,10);
+  receive({type:'busy',value:false});
+  elements['edit-angle'].value='30';elements.rotate.onclick();assert.equal(messages.at(-1).angle,30);
+  receive({type:'busy',value:false});
+  elements['add-name'].value='Монета';elements['add-state'].value='background';elements['add-name'].oninput();
+  assert.equal(elements.add.disabled,false);elements.add.onclick();assert.equal(messages.at(-1).name,'Монета');
+  assert.equal(messages.at(-1).state,'background');
+  receive({type:'busy',value:false});receive({type:'asset-selection',selected:null,scene:null});
+  assert.equal(elements.add.disabled,true);assert.equal(elements.duplicate.disabled,true);
 });

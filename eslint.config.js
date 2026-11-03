@@ -33,6 +33,12 @@ module.exports = tseslint.config(
     },
   },
   {
+    files: ['editor.ts'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^(editComposition|syncCurrentScene|selectedComposition|sceneItems)$' }],
+    },
+  },
+  {
     ignores: ['code.js', 'out/**', 'generated/**', 'scripts/**', 'tests/**', 'dist', 'eslint.config.js'],
   },
 )

@@ -1,6 +1,8 @@
 figma.showUI(__html__, { width: 440, height: 700, themeColors: true });
 let busy = false;
 let previousResult: FrameNode | undefined;
+let trackedScene: FrameNode | undefined;
+let documentRefresh: number | undefined;
 function selectedAssetNode(): FrameNode | undefined {
   if (figma.currentPage.selection.length !== 1) return;
   let node: BaseNode | null = figma.currentPage.selection[0];
@@ -19,9 +21,13 @@ function selectedAssetNode(): FrameNode | undefined {
 
 function sendSelectionState(): void {
   const node = selectedAssetNode();
+  const scene = selectedComposition();
+  if (scene) trackedScene = scene;
   figma.ui.postMessage({ type: 'asset-selection', selected: node ? {
+    instanceId: node.id,
     name: node.name, state: node.getPluginData('ochen-state') || (node.getPluginData('ochen-role') === 'background' ? 'background' : 'main'),
-  } : null });
+    angle: Math.atan2(node.relativeTransform[1][0], node.relativeTransform[0][0]) * 180 / Math.PI,
+  } : null, scene: scene ? { name: scene.name, count: sceneItems(scene).length } : null });
 }
 
 function changeSelectedState(state: unknown): void {
@@ -62,6 +68,24 @@ function changeSelectedState(state: unknown): void {
 }
 
 figma.on('selectionchange', sendSelectionState);
+function scheduleSceneRefresh(): void {
+  if (documentRefresh !== undefined) clearTimeout(documentRefresh);
+  documentRefresh = setTimeout(() => {
+    documentRefresh = undefined;
+    if (trackedScene && !trackedScene.removed) syncCurrentScene(trackedScene);
+    sendSelectionState();
+  }, 80);
+}
+// Observe only the active page; dynamic-page documents need not load every page.
+let observedPage = figma.currentPage;
+observedPage.on('nodechange', scheduleSceneRefresh);
+figma.on('currentpagechange', () => {
+  observedPage.off('nodechange', scheduleSceneRefresh);
+  observedPage = figma.currentPage;
+  observedPage.on('nodechange', scheduleSceneRefresh);
+  trackedScene = undefined;
+  sendSelectionState();
+});
 figma.ui.onmessage = (message: unknown) => {
   if (!message || typeof message !== 'object' || !('type' in message)) return;
   const request = message as Record<string, unknown>;
@@ -70,12 +94,15 @@ figma.ui.onmessage = (message: unknown) => {
     sendSelectionState();
     return;
   }
-  if (request.type === 'set-state' && !busy) {
+  if ((request.type === 'set-state' || request.type === 'edit') && !busy) {
     busy = true;
     figma.ui.postMessage({ type: 'busy', value: true });
     try {
-      changeSelectedState(request.state);
-      figma.ui.postMessage({ type: 'success', message: 'Состояние применено. Положение, поворот, размер и порядок слоёв сохранены.' });
+      const scene = selectedComposition();
+      const message = request.type === 'edit' ? editComposition(request)
+        : (changeSelectedState(request.state), 'Состояние применено. Положение, поворот, размер и порядок слоёв сохранены.');
+      if (scene) syncCurrentScene(scene);
+      figma.ui.postMessage({ type: 'success', message });
     } catch (error) {
       figma.ui.postMessage({ type: 'error', message: error instanceof Error ? error.message : 'Не удалось изменить состояние.' });
     } finally {
@@ -117,6 +144,8 @@ figma.ui.onmessage = (message: unknown) => {
     frame.setPluginData('ochen-composition', '1');
     frame.setPluginData('ochen-template', plan.template);
     frame.setPluginData('ochen-seed', String(plan.seed));
+    frame.setPluginData('ochen-scene-scale', String(placements[0].scale));
+    frame.setPluginData('ochen-detail', request.size);
     frame.setPluginData('ochen-plan', JSON.stringify({ version: 2, ids: selected.map(a => a.id), size: request.size,
       width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: request.backgroundDuplicate, stateMode,
       placements: placements.map(p => ({ id: p.asset.id, state: p.asset.role, role: p.role, rotation: p.rotation,
@@ -145,6 +174,7 @@ figma.ui.onmessage = (message: unknown) => {
       background.x = (width - backdrop.width * scale) / 2;
       background.y = (height - backdrop.height * scale) / 2;
       backgroundClip.locked = true;
+      backgroundClip.setPluginData('ochen-backdrop', '1');
       background.locked = true;
     }
     for (const placement of placements) {
@@ -164,6 +194,8 @@ figma.ui.onmessage = (message: unknown) => {
     figma.currentPage.selection = [frame];
     figma.viewport.scrollAndZoomIntoView([frame]);
     previousResult = frame;
+    trackedScene = frame;
+    syncCurrentScene(frame);
     figma.ui.postMessage({ type: 'success', seed: plan.seed, template: plan.template,
       message: `Предметов: ${selected.length}${request.backgroundDuplicate ? ' + 1 фоновый дубль' : ''}. Схема: ${plan.template}, seed: ${plan.seed}. Повороты по часовой стрелке: ${placements.filter(p => p.role !== 'background').map(p => p.asset.name + ' ' + p.rotation + '°').join(', ')}.` });
   } catch (error) {
@@ -173,5 +205,6 @@ figma.ui.onmessage = (message: unknown) => {
   } finally {
     busy = false;
     figma.ui.postMessage({ type: 'busy', value: false });
+    sendSelectionState();
   }
 };
