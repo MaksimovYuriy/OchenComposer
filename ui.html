@@ -12,7 +12,7 @@
 <section id="build-panel">
 <label for="input-mode">Способ подбора</label>
 <select id="input-mode"><option value="names">Названия · без ИИ</option><option value="metaphor">Метафора или описание сцены · ИИ</option></select>
-<p id="ai-disclosure" class="small" hidden>ИИ возвращает экземпляры, позиции, повороты и слои. Поддерживается «на книге / на папке». Наружу отправятся фраза и текстовый каталог с размерами предметов, формат и seed — без SVG, примеров и документа. Каждая сборка и «Новый вариант» расходуют запрос. Дубли и раскладку здесь задаёт план ИИ.</p>
+<p id="ai-disclosure" class="small" hidden>ИИ интерпретирует смысл и выбирает подходящую выполнимую композицию, адаптируя детали. Объяснение появится под запросом. Наружу отправятся фраза, текстовые правила и каталог с размерами, формат и seed — без SVG и документа. До 2 API-запросов на сборку: второй только для исправления некорректного плана. «Новый вариант» запускает новый подбор.</p>
 <details style="margin-top:16px"><summary>Настройки ИИ · OpenRouter</summary>
 <p id="ai-key-status">Ключ не добавлен. Для названий ключ не нужен.</p>
 <label for="ai-key">Личный API-ключ</label><input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Ключ не добавлен">
@@ -200,6 +200,7 @@ el('add-name').oninput=update;el('add').onclick=()=>edit('add',{name:el('add-nam
 el('rotate').onclick=()=>{const value=el('edit-angle').value,angle=Number(value);if(!value.trim()||!Number.isFinite(angle)||Math.abs(angle)>360){el('status').textContent='Угол должен быть от −360° до 360°.';el('status').dataset.error='true';return}edit('rotate',{angle})};
 window.onmessage=event=>{
  const msg=event.data.pluginMessage;if(!msg||typeof msg.type!=='string')return;
+ if(msg.type==='ai-progress'){el('status').textContent=msg.message;el('status').dataset.error='false'}
  if(msg.type==='ai-settings'){hasAiKey=msg.hasKey;el('ai-key').value='';el('ai-key').placeholder=hasAiKey?'Ключ добавлен · можно заменить':'Ключ не добавлен';el('ai-model').value=msg.model;el('ai-remember').checked=msg.remember;el('ai-key-status').textContent=hasAiKey?(msg.remember?'Ключ сохранён на этом устройстве.':'Ключ добавлен до закрытия плагина.'):'Ключ не добавлен. Для названий ключ не нужен.';update()}
  if(msg.type==='ai-result'){el('ai-result').textContent=msg.explanation+' Выбраны: '+msg.names.join(', ')+'. Модель: '+msg.model;el('ai-result').hidden=false}
  if(msg.type==='catalog'){ready=true;el('catalog').textContent='Доступны: '+msg.names.join(', ')+'.';el('status').textContent='Библиотека готова.';update()}

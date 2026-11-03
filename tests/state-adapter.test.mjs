@@ -47,7 +47,7 @@ function session(options={}){
   const context=vm.createContext({figma,__html__:'',console,setTimeout,clearTimeout,fetch:options.fetch});
   vm.runInContext(palettePrelude,context);
   vm.runInContext(ts.transpile(readFileSync(new URL('../core.ts',import.meta.url),'utf8')+
-    '\nconst ASSETS = '+JSON.stringify([{...asset,role:'main'},{...asset,role:'background'}])+';const BACKDROPS=[{size:"large",svg:"<svg/>",width:1000,height:1000}];\n'+
+    '\nconst AI_COMPOSITION_GUIDE='+JSON.stringify(readFileSync('catalog/ai-composition-rules.json','utf8'))+';const ASSETS = '+JSON.stringify([{...asset,role:'main'},{...asset,role:'background'}])+';const BACKDROPS=[{size:"large",svg:"<svg/>",width:1000,height:1000}];\n'+
     readFileSync(new URL('../editor.ts',import.meta.url),'utf8')+'\n'+
     readFileSync(new URL('../export.ts',import.meta.url),'utf8')+'\n'+
     readFileSync(new URL('../scene-plan.ts',import.meta.url),'utf8')+'\n'+
@@ -58,7 +58,7 @@ function session(options={}){
 
 test('AI scene flow builds validated instances, preserves prior scenes, and requests a new plan for a variant',async()=>{
  let calls=0;
- const s=session({fetch:async()=>{calls++;return {ok:true,text:async()=>JSON.stringify({model:'test:free',choices:[{finish_reason:'stop',message:{content:JSON.stringify({status:'ok',items:[{instanceId:'i1',assetId:'book',x:.5,y:.5,rotation:0,layer:0,on:null}],explanation:'Учиться.'})}}]})}}});
+ const s=session({fetch:async()=>{calls++;return {ok:true,text:async()=>JSON.stringify({model:'test:free',choices:[{finish_reason:'stop',message:{content:JSON.stringify({status:'ok',items:[{instanceId:'i1',assetId:'book',x:.5,y:.5,rotation:0,layer:0,on:null}],relations:[],explanation:'Учиться.'})}}]})}}});
  await s.figma.ui.onmessage({type:'ai-configure',key:'test-secret',model:'openrouter/free',remember:false});
  const request={type:'compose-metaphor',text:'Знания',size:'large',format:'square',template:'auto',seed:0,stateMode:'color',backgroundDuplicate:false};
  await s.figma.ui.onmessage(request);
@@ -83,14 +83,14 @@ test('Check key configures the supplied draft before authenticating and returns 
 
 test('Unsupported/invalid model output and page changes do not create partial scenes',async()=>{
  for(const kind of ['unsupported','unknown','page']){
-  let finish;
-  const s=session({fetch:()=>new Promise(resolve=>{finish=resolve;})});
+  let finish,response;
+  const s=session({fetch:()=>response?Promise.resolve(response):new Promise(resolve=>{finish=resolve;})});
   await s.figma.ui.onmessage({type:'ai-configure',key:'test-secret',model:'openrouter/free',remember:false});
   const pending=s.figma.ui.onmessage({type:'compose-metaphor',text:'test',size:'large',format:'square',template:'auto',seed:0,stateMode:'color',backgroundDuplicate:false});
   await Promise.resolve();await Promise.resolve();
   if(kind==='page'){s.figma.currentPage=s.node('PAGE');s.figma.currentPage.selection=[];}
-  const plan=kind==='unsupported'?{status:'unsupported',items:[],explanation:'Нет объекта.'}:{status:'ok',items:[{instanceId:'i1',assetId:kind==='unknown'?'dragon':'book',x:.5,y:.5,rotation:0,layer:0,on:null}],explanation:'Test'};
-  finish({ok:true,text:async()=>JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(plan)}}]})});
+  const plan=kind==='unsupported'?{status:'unsupported',items:[],relations:[],explanation:'Нет объекта.'}:{status:'ok',items:[{instanceId:'i1',assetId:kind==='unknown'?'dragon':'book',x:.5,y:.5,rotation:0,layer:0,on:null}],relations:[],explanation:'Test'};
+  response={ok:true,text:async()=>JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(plan)}}]})};finish(response);
   await pending;assert.ok(s.messages.some(m=>m.type==='error'));assert.equal(s.frame.removed,false);assert.equal(s.frame.parent.children.length,1);
  }
 });

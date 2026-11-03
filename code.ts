@@ -187,7 +187,7 @@ figma.ui.onmessage = async (message: unknown) => {
     if(request.type==='compose-metaphor'){
       await semanticReady;
       const page=figma.currentPage;
-      interpretation=await interpretMetaphor(request.text,{width,height,size:request.size,seed:request.seed,geometry:candidates.map(a=>({id:a.id,width:a.width,height:a.height,rotationAngles:a.rotationAngles||[0]}))});
+      interpretation=await interpretMetaphor(request.text,{width,height,size:request.size,seed:request.seed,geometry:candidates.map(a=>({id:a.id,width:a.width,height:a.height,rotationAngles:a.rotationAngles||[0]}))},recipe=>{composeAiScene(recipe,candidates,ASSETS.filter(a=>a.role==='background'),width,height,request.seed as number,stateMode);});
       if(figma.currentPage!==page)throw new Error('Страница изменилась во время запроса. Повторите сборку на нужной странице.');
       if(interpretation.plan.status==='unsupported')throw new Error(interpretation.plan.explanation);
       selected=interpretation.plan.items.map(item=>{
