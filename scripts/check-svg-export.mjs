@@ -6,6 +6,7 @@ import {pathToFileURL} from 'node:url';
 // Real DOMParser coverage: no replacement XML parser in the Node tests.
 const html=readFileSync('ui.html','utf8');
 const validator=html.slice(html.indexOf('function validateSvgExport('),html.indexOf("el('tab-build').onclick"));
+const examples=process.argv.includes('--examples')?JSON.parse(readFileSync('examples/manifest.json','utf8')).examples.map(sample=>({...sample,svg:readFileSync('examples/'+sample.file,'utf8')})):[];
 const checks=`
 const base={width:100,height:80,groups:[{id:'ochen_item_0001',name:'Book & coin'}]};
 const good='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80"><defs><linearGradient id="paint"><stop stop-color="#abcdef"/></linearGradient><clipPath id="clip"><rect width="100" height="80"/></clipPath></defs><g id="ochen_item_0001" transform="rotate(8 50 40)" clip-path="url(#clip)"><path fill="url(#paint)" d="M0 0h20v20z"/></g></svg>';
@@ -23,6 +24,7 @@ for(const [name,svg] of [
  ['event attribute',good.replace('<path','<path onclick="x()"')],
  ['DOCTYPE','<!DOCTYPE svg>'+good]
 ])check(name,svg,false);
+for(const sample of ${JSON.stringify(examples).replaceAll('<','\\u003c')}){validateSvgExport(sample);results.push(sample.file+': PASS')}
 document.getElementById('results').textContent=JSON.stringify(results);
 `;
 // Failure must produce a visible marker instead of a misleading empty success.

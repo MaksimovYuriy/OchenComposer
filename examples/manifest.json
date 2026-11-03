@@ -1,0 +1,114 @@
+{
+  "generator": "scripts/submission-examples.mjs",
+  "note": "Локальные SVG на исходных элементах; не являются доказательством экспорта или обратного импорта в Figma и не используют живой API.",
+  "examples": [
+    {
+      "file": "01-learning.svg",
+      "title": "Знания и связь",
+      "description": "Сборка по названиям: книга, телефон, монета. L, квадрат, фиолетовая схема.",
+      "width": 1000,
+      "height": 1000,
+      "size": "large",
+      "palette": "violet",
+      "mode": "names",
+      "seed": 0,
+      "groups": [
+        {
+          "id": "ochen_item_0001",
+          "name": "Книга",
+          "assetId": "book",
+          "state": "main"
+        },
+        {
+          "id": "ochen_item_0002",
+          "name": "Телефон",
+          "assetId": "phone",
+          "state": "main"
+        },
+        {
+          "id": "ochen_item_0003",
+          "name": "Монета",
+          "assetId": "coin",
+          "state": "main"
+        }
+      ],
+      "sources": [
+        "assets/mainground/large/Книга.svg",
+        "assets/mainground/large/Телефон.svg",
+        "assets/mainground/large/Монета.svg"
+      ]
+    },
+    {
+      "file": "02-growth.svg",
+      "title": "Идеи и развитие",
+      "description": "Сборка по названиям: лампа, книга, цветы. S, вертикальный формат, оранжевая схема.",
+      "width": 800,
+      "height": 1200,
+      "size": "small",
+      "palette": "orange",
+      "mode": "names",
+      "seed": 0,
+      "groups": [
+        {
+          "id": "ochen_item_0001",
+          "name": "Лампа",
+          "assetId": "lamp",
+          "state": "main"
+        },
+        {
+          "id": "ochen_item_0002",
+          "name": "Книга",
+          "assetId": "book",
+          "state": "main"
+        },
+        {
+          "id": "ochen_item_0003",
+          "name": "Цветы",
+          "assetId": "flowers",
+          "state": "main"
+        }
+      ],
+      "sources": [
+        "assets/mainground/small/Лампа.svg",
+        "assets/mainground/small/Книга.svg",
+        "assets/mainground/small/Цветы.svg"
+      ]
+    },
+    {
+      "file": "03-dialogue.svg",
+      "title": "Идея между знаниями",
+      "description": "Локальное исполнение подготовленного JSON-плана: две книги с наклоном к центру и лампа между ними. Это пример формата ответа ИИ, не сохранённый ответ реального API.",
+      "width": 1200,
+      "height": 630,
+      "size": "large",
+      "palette": "turquoise",
+      "mode": "prepared-plan",
+      "seed": 0,
+      "groups": [
+        {
+          "id": "ochen_item_0001",
+          "name": "Книга",
+          "assetId": "book",
+          "state": "main"
+        },
+        {
+          "id": "ochen_item_0002",
+          "name": "Книга",
+          "assetId": "book",
+          "state": "main"
+        },
+        {
+          "id": "ochen_item_0003",
+          "name": "Лампа",
+          "assetId": "lamp",
+          "state": "main"
+        }
+      ],
+      "sources": [
+        "assets/mainground/large/Книга.svg",
+        "assets/mainground/large/Книга.svg",
+        "assets/mainground/large/Лампа.svg"
+      ]
+    }
+  ]
+}
