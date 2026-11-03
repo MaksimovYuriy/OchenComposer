@@ -11,7 +11,8 @@
     "preview:ai-scene": "node scripts/preview-ai-scene.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "watch": "node --watch --watch-path=assets --watch-path=catalog --watch-path=core.ts --watch-path=palette-core.ts --watch-path=palette-figma.ts --watch-path=palette-registry.ts --watch-path=editor.ts --watch-path=export.ts --watch-path=semantics.ts --watch-path=scene-plan.ts --watch-path=code.ts --watch-path=scripts/build.mjs scripts/build.mjs"
+    "watch": "node --watch --watch-path=src --watch-path=assets --watch-path=catalog --watch-path=scripts scripts/build.mjs",
+    "pretest": "npm run build"
   },
   "author": "",
   "license": "",

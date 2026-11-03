@@ -1,0 +1,142 @@
+
+const el=id=>document.getElementById(id);
+let ready=false,busy=false,selectedAsset=null,selectedScene=null;
+let hasAiKey=false;
+let pendingAiAction=null;
+let paletteEntries=[],chosenPaletteKey='builtin:violet';
+function send(message){parent.postMessage({pluginMessage:message},'*')}
+el('input-mode').onchange=()=>{el('ai-disclosure').hidden=el('input-mode').value!=='metaphor';el('names-notes').hidden=el('input-mode').value==='metaphor';el('query').placeholder=el('input-mode').value==='metaphor'?'Например, три книги: на первой телефон, на второй монета':'Книга, телефон, монета';el('ai-result').hidden=true;update()};
+function aiAction(action){
+ if(busy)return;
+ const settings={key:el('ai-key').value,model:el('ai-model').value.trim(),remember:el('ai-remember').checked};
+ pendingAiAction=action;busy=true;
+ const text=action==='test'?'Проверяем ключ OpenRouter… Ожидание до 10 секунд.':action==='delete'?'Удаляем ключ…':'Применяем настройки ИИ…';
+ el('ai-feedback').textContent=text;el('ai-feedback').style.color='';el('status').textContent=text;el('status').dataset.error='false';update();
+ send({type:action==='save'?'ai-configure':'ai-'+action,...(action==='delete'?{}:settings)});
+ el('ai-key').value='';
+}
+el('ai-save').onclick=()=>aiAction('save');
+['test','delete'].forEach(action=>el('ai-'+action).onclick=()=>aiAction(action));
+el('ai-key').oninput=update;
+function tab(name){['build','edit','palette','export'].forEach(id=>{el(id+'-panel').hidden=name!==id;el('tab-'+id).dataset.active=String(name===id)})}
+el('tab-export').onclick=()=>tab('export');
+let exportUrl=null;
+function clearExport(){if(exportUrl)URL.revokeObjectURL(exportUrl);exportUrl=null;el('export-download').hidden=true;el('export-info').textContent=''}
+el('export-svg').onclick=()=>{if(busy||!selectedScene)return;clearExport();busy=true;update();el('status').dataset.error='false';el('status').textContent='Подготавливаем SVG…';send({type:'export-svg',sceneId:selectedScene.id})};
+function validateSvgExport(result){
+ const svg=result.svg;
+ if(typeof svg!=='string'||svg.length>20*1024*1024||/<!DOCTYPE|<!ENTITY|<\?xml-stylesheet/i.test(svg))throw new Error('Некорректный SVG.');
+ const doc=new DOMParser().parseFromString(svg,'image/svg+xml'),root=doc.documentElement;
+ if(doc.querySelector('parsererror')||root.localName!=='svg'||root.namespaceURI!=='http://www.w3.org/2000/svg')throw new Error('Не удалось прочитать векторный SVG.');
+ const box=(root.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+ if(box.length!==4||!box.every(Number.isFinite)||Math.abs(box[0])>.01||Math.abs(box[1])>.01||Math.abs(box[2]-result.width)>.01||Math.abs(box[3]-result.height)>.01)throw new Error('Размер SVG не совпал с холстом композиции.');
+ const ids=new Map(),refs=[];
+ for(const node of [root,...root.querySelectorAll('*')]){
+  if(['image','script','foreignobject','iframe','video','audio'].includes(node.localName.toLowerCase()))throw new Error('SVG содержит растр или неподдерживаемую вставку.');
+  const id=node.getAttribute('id');if(id){if(ids.has(id))throw new Error('Повторяющиеся идентификаторы SVG.');ids.set(id,node)}
+  const values=[...node.attributes].map(a=>{if(/^on/i.test(a.name))throw new Error('Недопустимый обработчик в SVG.');if(a.localName==='href'){if(!a.value.startsWith('#'))throw new Error('Внешний ресурс в SVG.');refs.push(a.value.slice(1))}return a.value});
+  if(node.localName==='style')values.push(node.textContent);
+  for(const value of values){if(/@import|javascript:|expression\s*\(/i.test(value))throw new Error('Внешние стили в SVG.');for(const match of value.matchAll(/url\(\s*['"]?([^)'"\s]+)['"]?\s*\)/gi)){if(!match[1].startsWith('#'))throw new Error('Внешний ресурс в SVG.');refs.push(match[1].slice(1))}}
+ }
+ if(refs.some(id=>!ids.has(id)))throw new Error('В SVG потеряна ссылка на маску или градиент.');
+ if(!Array.isArray(result.groups)||!result.groups.length)throw new Error('Нет групп предметов.');
+ for(const group of result.groups){const node=ids.get(group.id);if(!node||node.localName!=='g'||!node.querySelector('path,rect,circle,ellipse,polygon,polyline,line,use'))throw new Error('SVG не сохранил отдельную векторную группу предмета.');node.setAttribute('aria-label',group.name);const title=doc.createElementNS(root.namespaceURI,'title');title.textContent=group.name;node.insertBefore(title,node.firstChild)}
+ return new XMLSerializer().serializeToString(doc);
+}
+el('tab-build').onclick=()=>tab('build');el('tab-edit').onclick=()=>tab('edit');
+el('tab-palette').onclick=()=>tab('palette');el('choose-palette').onclick=()=>tab('palette');
+function samePalette(a,b){return a&&b&&a.id===b.id&&a.version===b.version&&JSON.stringify(a.colors)===JSON.stringify(b.colors)}
+function paletteOptions(){const entries=[...paletteEntries];if(selectedScene?.palette&&!entries.some(e=>samePalette(e.palette,selectedScene.palette)))entries.push({key:'document',palette:selectedScene.palette,warnings:selectedScene.paletteWarnings||[]});return entries}
+function currentPalette(){return paletteOptions().find(e=>e.key===chosenPaletteKey)?.palette}
+function renderPalettes(preferred){
+ const entries=paletteOptions();
+ if(preferred)chosenPaletteKey=preferred;
+ if(!entries.some(e=>e.key===chosenPaletteKey))chosenPaletteKey=entries.find(e=>samePalette(e.palette,selectedScene?.palette))?.key||entries[0]?.key||'builtin:violet';
+ el('palette-select').replaceChildren();
+ entries.forEach(entry=>{const option=document.createElement('option');option.value=entry.key;option.textContent=entry.palette.name+(entry.key==='document'?' · из документа':entry.key.startsWith('custom:')?' · личная':'');el('palette-select').appendChild(option)});
+ el('palette-select').value=chosenPaletteKey;
+ const selected=entries.find(e=>e.key===chosenPaletteKey);el('palette-swatches').replaceChildren();
+ if(selected)Object.entries(selected.palette.colors).forEach(([role,hex])=>{
+  const card=document.createElement('div');card.style.cssText='display:flex;gap:7px;align-items:center;padding:7px;border:1px solid var(--figma-color-border,#ddd);border-radius:6px';
+  const swatch=document.createElement('span');swatch.style.cssText='display:block;width:23px;height:30px;border:1px solid #aaa;border-radius:4px;flex-shrink:0';swatch.style.background=hex;
+  const label=document.createElement('span');label.textContent=role+' '+hex;label.style.fontSize='10px';card.appendChild(swatch);card.appendChild(label);el('palette-swatches').appendChild(card);
+ });
+ el('build-palette-name').textContent=selected?.palette.name||'Загружается…';
+ el('palette-warnings').textContent=(selected?.warnings||[]).join(' ');
+ el('palette-target').textContent=selectedScene?(selectedScene.paletteError||'Выбрана: '+selectedScene.name+' · текущая схема: '+(selectedScene.palette?.name||'не определена')):'Выберите композицию или один её предмет в Figma.';
+ update();
+}
+el('palette-select').onchange=()=>{chosenPaletteKey=el('palette-select').value;renderPalettes()};
+el('apply-palette').onclick=()=>{busy=true;update();el('status').dataset.error='false';el('status').textContent='Перекрашиваем выбранную композицию…';send({type:'apply-palette',palette:currentPalette()})};
+el('palette-example').onclick=()=>{
+ const source=paletteEntries.find(e=>e.key==='builtin:violet')?.palette;if(!source)return;
+ const example={...source,id:'my-palette',name:'Моя палитра',version:1};
+ const url=URL.createObjectURL(new Blob([JSON.stringify(example,null,2)],{type:'application/json'}));
+ const link=document.createElement('a');link.href=url;link.download='ochen-palette.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+el('palette-file').onchange=async()=>{
+ const file=el('palette-file').files?.[0];if(!file)return;
+ busy=true;update();el('status').dataset.error='false';el('status').textContent='Загружаем палитру…';
+ try{if(file.size>32768)throw new Error('Файл палитры должен быть не больше 32 КБ.');const palette=JSON.parse(await file.text());send({type:'import-palette',palette});}
+ catch(error){busy=false;update();el('status').dataset.error='true';el('status').textContent=error instanceof SyntaxError?'Не удалось прочитать JSON. Используйте файл-пример.':error.message;}
+ finally{el('palette-file').value='';}
+};
+function update(){
+ const metaphor=el('input-mode').value==='metaphor';
+ ['input-mode','query','format','size','template','seed','state-mode','background-duplicate','ai-key','ai-model','ai-remember'].forEach(id=>el(id).disabled=busy);
+ el('template').disabled=busy||metaphor;el('background-duplicate').disabled=busy||metaphor;
+ el('ai-save').disabled=busy||(!hasAiKey&&!el('ai-key').value.trim());el('ai-test').disabled=busy||(!hasAiKey&&!el('ai-key').value.trim());el('ai-delete').disabled=busy;
+ el('ai-test').textContent=pendingAiAction==='test'?'Проверяем…':'Проверить ключ';
+ el('export-svg').disabled=busy||!selectedScene;
+ el('export-target').textContent=selectedScene?'Выбрана: '+selectedScene.name:'Выберите композицию или её предмет в Figma.';
+ const disabled=!ready||busy||!el('query').value.trim()||(metaphor&&!hasAiKey);el('compose').disabled=disabled;el('variant').disabled=disabled;
+ el('state-main').disabled=busy||!selectedAsset||selectedAsset.state==='main';
+ el('state-background').disabled=busy||!selectedAsset||selectedAsset.state==='background';
+ el('add').disabled=busy||!selectedScene||!el('add-name').value.trim();
+ ['move-left','move-up','move-down','move-right','rotate','duplicate','delete','raise','lower'].forEach(id=>el(id).disabled=busy||!selectedAsset);
+ el('apply-palette').disabled=busy||!selectedScene||!currentPalette();el('palette-file').disabled=busy;
+ el('palette-example').disabled=busy||!paletteEntries.length;el('palette-select').disabled=busy||!paletteEntries.length;
+}
+el('query').oninput=update;
+function compose(next){
+ if(busy)return;
+ let seed=Number(el('seed').value);
+ if(!el('seed').value.trim()||!Number.isInteger(seed)||seed<0||seed>2147483647){el('status').textContent='Seed: целое число от 0 до 2147483647.';el('status').dataset.error='true';return}
+ if(next)seed=seed===2147483647?0:seed+1;el('seed').value=String(seed);busy=true;update();el('status').textContent='Собираем композицию…';el('status').dataset.error='false';
+ el('ai-result').hidden=true;
+ send({type:el('input-mode').value==='metaphor'?'compose-metaphor':'compose',text:el('query').value,format:el('format').value,size:el('size').value,backgroundDuplicate:el('background-duplicate').checked,template:el('template').value,seed,stateMode:el('state-mode').value,palette:currentPalette()});
+}
+el('compose').onclick=()=>compose(false);el('variant').onclick=()=>compose(true);
+function setState(state){busy=true;update();send({type:'set-state',state})}
+el('state-main').onclick=()=>setState('main');el('state-background').onclick=()=>setState('background');
+function edit(action,data={}){busy=true;update();el('status').dataset.error='false';el('status').textContent='Применяем команду…';send({type:'edit',action,...data})}
+el('add-name').oninput=update;el('add').onclick=()=>edit('add',{name:el('add-name').value,state:el('add-state').value});
+[['move-left',-10,0],['move-right',10,0],['move-up',0,-10],['move-down',0,10]].forEach(([id,dx,dy])=>el(id).onclick=()=>edit('move',{dx,dy}));
+['duplicate','delete','raise','lower'].forEach(action=>el(action).onclick=()=>edit(action));
+el('rotate').onclick=()=>{const value=el('edit-angle').value,angle=Number(value);if(!value.trim()||!Number.isFinite(angle)||Math.abs(angle)>360){el('status').textContent='Угол должен быть от −360° до 360°.';el('status').dataset.error='true';return}edit('rotate',{angle})};
+window.onmessage=event=>{
+ const msg=event.data.pluginMessage;if(!msg||typeof msg.type!=='string')return;
+ if(msg.type==='ai-progress'){el('status').textContent=msg.message;el('status').dataset.error='false'}
+ if(msg.type==='ai-settings'){hasAiKey=msg.hasKey;el('ai-key').value='';el('ai-key').placeholder=hasAiKey?'Ключ добавлен · можно заменить':'Ключ не добавлен';el('ai-model').value=msg.model;el('ai-remember').checked=msg.remember;el('ai-key-status').textContent=hasAiKey?(msg.remember?'Ключ сохранён на этом устройстве.':'Ключ добавлен до закрытия плагина.'):'Ключ не добавлен. Для названий ключ не нужен.';update()}
+ if(msg.type==='ai-result'){el('ai-result').textContent=msg.explanation+' Выбраны: '+msg.names.join(', ')+'. Модель: '+msg.model;el('ai-result').hidden=false}
+ if(msg.type==='catalog'){ready=true;el('catalog').textContent='Доступны: '+msg.names.join(', ')+'.';el('status').textContent='Библиотека готова.';update()}
+ if(msg.type==='busy'){busy=msg.value;update()}
+ if(msg.type==='svg-export'){
+  try{const svg=validateSvgExport(msg);clearExport();exportUrl=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}));const link=el('export-download');link.href=exportUrl;link.download=msg.filename;link.hidden=false;link.textContent='Скачать '+msg.filename;el('export-info').textContent=msg.sceneName+' · '+msg.width+' × '+msg.height+' · предметов: '+msg.groups.length+' · снимок на момент подготовки';el('status').textContent='SVG готов к скачиванию.';el('status').dataset.error='false';tab('export')}
+  catch(error){clearExport();el('status').textContent=error.message;el('status').dataset.error='true'}
+ }
+ if(msg.type==='palettes'){paletteEntries=msg.entries;renderPalettes(msg.selectedKey)}
+ if(msg.type==='palette-notice'){el('status').textContent=msg.message;el('status').dataset.error='true'}
+ if(msg.type==='asset-selection'){
+  const previousId=selectedAsset?.instanceId,previousSceneId=selectedScene?.id;selectedAsset=msg.selected;selectedScene=msg.scene||null;
+  el('scene-name').textContent=selectedScene?selectedScene.name+' · экземпляров: '+selectedScene.count:'Выберите композицию или её предмет в Figma.';
+  el('selected-asset').textContent=selectedAsset?selectedAsset.name+' · '+(selectedAsset.state==='main'?'цветной':'монохромный'):'Выберите один предмет композиции в Figma.';
+  el('scene-palette-name').textContent=selectedScene?.palette?'Палитра: '+selectedScene.palette.name:(selectedScene?.paletteError||'');
+  if(selectedAsset&&Number.isFinite(selectedAsset.angle))el('edit-angle').value=String(Math.round(selectedAsset.angle*100)/100);
+  if(selectedAsset?.instanceId&&selectedAsset.instanceId!==previousId)tab('edit');
+  const preferred=selectedScene?.palette&&selectedScene.id!==previousSceneId?paletteOptions().find(e=>samePalette(e.palette,selectedScene.palette))?.key:undefined;
+  renderPalettes(preferred);update();
+ }
+ if(msg.type==='error'||msg.type==='success'){el('status').textContent=msg.message;el('status').dataset.error=String(msg.type==='error');if(pendingAiAction){el('ai-feedback').textContent=msg.message;el('ai-feedback').style.color=msg.type==='error'?'var(--figma-color-text-danger,#c33)':'';pendingAiAction=null;update()}}
+};
+send({type:'catalog'});

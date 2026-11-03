@@ -1,3 +1,4 @@
+import {readSource} from '../scripts/sources.mjs';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
@@ -46,13 +47,13 @@ function session(options={}){
   const asset={id:'book',name:'Книга',size:'large',width:800,height:400,svg:'<svg/>',source:'test'};
   const context=vm.createContext({figma,__html__:'',console,setTimeout,clearTimeout,fetch:options.fetch});
   vm.runInContext(palettePrelude,context);
-  vm.runInContext(ts.transpile(readFileSync(new URL('../core.ts',import.meta.url),'utf8')+
+  vm.runInContext(ts.transpile(readSource('composition')+
     '\nconst AI_COMPOSITION_GUIDE='+JSON.stringify(readFileSync('catalog/ai-composition-rules.json','utf8'))+';const ASSETS = '+JSON.stringify([{...asset,role:'main'},{...asset,role:'background'}])+';const BACKDROPS=[{size:"large",svg:"<svg/>",width:1000,height:1000}];\n'+
-    readFileSync(new URL('../editor.ts',import.meta.url),'utf8')+'\n'+
-    readFileSync(new URL('../export.ts',import.meta.url),'utf8')+'\n'+
-    readFileSync(new URL('../scene-plan.ts',import.meta.url),'utf8')+'\n'+
-    readFileSync(new URL('../semantics.ts',import.meta.url),'utf8')+'\n'+
-    readFileSync(new URL('../code.ts',import.meta.url),'utf8'),{target:ts.ScriptTarget.ES2020}),context);
+    readSource('editor')+'\n'+
+    readSource('svgExport')+'\n'+
+    readSource('scene')+'\n'+
+    readSource('ai')+'\n'+
+    readSource('plugin'),{target:ts.ScriptTarget.ES2020}),context);
   return {figma,frame,source,other,messages,node,events,failImport:()=>fail=true,failExport:()=>exportFailure=true,exported:()=>exported};
 }
 

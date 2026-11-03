@@ -1,20 +1,3 @@
-type Asset = {
-  id: string; name: string; role: 'main' | 'background'; size: 'large' | 'small';
-  source: string; width: number; height: number; svg: string;
-  rotationAngles?: number[];
-};
-type Placement = { asset: Asset; x: number; y: number; scale: number };
-type Backdrop = { size: 'large' | 'small'; svg: string; width: number; height: number };
-type Matrix = [[number, number, number], [number, number, number]];
-type Bounds = { x: number; y: number; width: number; height: number };
-type ScenePlacement = Placement & { role: 'main' | 'support' | 'background'; order: number;
-  rotation: number; pivot: { x: number; y: number }; transform: Matrix; bounds: Bounds };
-type StateMode = 'color' | 'mixed' | 'mono';
-type TemplateId = 'diagonal' | 'focus' | 'terrace';
-type CompositionQuality = { version: 'composition-v2'; score: number; density: number; balance: number; minSide: number; candidates: number; strategy: string; warnings: string[] };
-type ScenePlan = { template: TemplateId; seed: number; placements: ScenePlacement[]; quality?: CompositionQuality };
-type Zone = { x: number; y: number; w: number; h: number };
-
 function composeZonedScene(assets: Asset[], backgrounds: Asset[], duplicate: boolean,
   width: number, height: number, template: string, seed: number, stateMode: StateMode = 'color'): ScenePlan {
   if (!assets.length || assets.length > 8) throw new Error('Допустимо от 1 до 8 предметов.');
@@ -235,49 +218,3 @@ function composeScene(assets: Asset[], backgrounds: Asset[], duplicate: boolean,
   return chosen;
 }
 
-function rotatedSize(width: number, height: number, angle: number): { width: number; height: number } {
-  const radians = angle * Math.PI / 180;
-  const c = Math.abs(Math.cos(radians)), s = Math.abs(Math.sin(radians));
-  return { width: c * width + s * height, height: s * width + c * height };
-}
-
-function centeredTransform(width: number, height: number, angle: number, cx: number, cy: number): Matrix {
-  const radians = angle * Math.PI / 180;
-  const c = Math.cos(radians), s = Math.sin(radians);
-  return [[c, -s, cx - c * width / 2 + s * height / 2], [s, c, cy - s * width / 2 - c * height / 2]];
-}
-
-function stateReplacementScale(source: Asset, target: Asset, width: number, height: number): number {
-  if (source.id !== target.id || source.size !== target.size || source.width !== target.width || source.height !== target.height) {
-    throw new Error('Варианты предмета не имеют подтверждённого общего размера.');
-  }
-  const scale = width / source.width;
-  if (!Number.isFinite(scale) || scale <= 0 || Math.abs(height - source.height * scale) > Math.max(.1, height * .001)) {
-    throw new Error('Предмет растянут по осям. Восстановите его пропорции перед переключением.');
-  }
-  return scale;
-}
-
-function normalizeName(value: string): string {
-  return value.trim().toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ');
-}
-
-function resolveNames(text: string, assets: Asset[]): Asset[] {
-  if (text.length > 1000) throw new Error('Запрос слишком длинный: максимум 1000 символов.');
-  const tokens = text.split(/[,;\n]+/).map(normalizeName).filter(Boolean);
-  if (!tokens.length) throw new Error('Введите названия предметов через запятую.');
-  if (tokens.length > 8) throw new Error('В первой версии можно разместить не больше 8 предметов.');
-  const aliases: Record<string, string[]> = {
-    book: ['книги'], phone: ['смартфон'], coin: ['монеты'], puzzle: ['пазл'],
-    flowers: ['цветок'], headphones: ['наушник'], wallet: ['кошельки'],
-  };
-  const missing: string[] = [];
-  const result: Asset[] = [];
-  for (const token of tokens) {
-    const matches = assets.filter(asset => normalizeName(asset.name) === token || aliases[asset.id]?.includes(token));
-    if (matches.length === 1) result.push(matches[0]);
-    else missing.push(`${token}${matches.length > 1 ? ' (несколько совпадений)' : ''}`);
-  }
-  if (missing.length) throw new Error(`Не удалось выбрать: ${missing.join(', ')}. Доступны: ${assets.map(asset => asset.name).join(', ')}.`);
-  return result;
-}

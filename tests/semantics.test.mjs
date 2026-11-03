@@ -1,9 +1,10 @@
+import {readSource} from '../scripts/sources.mjs';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-const code=ts.transpile('const AI_COMPOSITION_GUIDE='+JSON.stringify(readFileSync('catalog/ai-composition-rules.json','utf8'))+';\n'+['core.ts','scene-plan.ts','semantics.ts'].map(p=>readFileSync(p,'utf8')).join('\n'),{target:ts.ScriptTarget.ES2020});
+const code=ts.transpile('const AI_COMPOSITION_GUIDE='+JSON.stringify(readFileSync('catalog/ai-composition-rules.json','utf8'))+';\n'+['composition','scene','ai'].map(p=>readSource(p)).join('\n'),{target:ts.ScriptTarget.ES2020});
 const item={instanceId:'i1',assetId:'book',x:.5,y:.5,rotation:0,layer:0,on:null};
 const plan={status:'ok',items:[item],relations:[],explanation:'Знания помогают находить решения.'};
 function session(options={}){

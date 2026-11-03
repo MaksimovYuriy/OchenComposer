@@ -1,8 +1,9 @@
+import {readSource} from './sources.mjs';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 const context=vm.createContext({});
-vm.runInContext(ts.transpile(['core.ts','scene-plan.ts','semantics.ts','generated/assets.ts'].map(p=>readFileSync(p,'utf8')).join('\n')+'\nglobalThis.library={assets:ASSETS,backdrops:BACKDROPS};',{target:ts.ScriptTarget.ES2020}),context);
+vm.runInContext(ts.transpile(['composition','scene','ai','generated/assets.ts'].map(p=>readSource(p)).join('\n')+'\nglobalThis.library={assets:ASSETS,backdrops:BACKDROPS};',{target:ts.ScriptTarget.ES2020}),context);
 const {assets,backdrops}=context.library,recipe=process.argv.includes('--rules')?JSON.parse(readFileSync('catalog/ai-composition-rules.json','utf8')).examples[0].plan:JSON.parse(readFileSync('catalog/scene-plan.example.json','utf8'));
 let index=0;
 function inline(svg){const prefix='s'+(++index)+'_';return svg.replace(/\bid="([^"]+)"/g,(_,id)=>'id="'+prefix+id+'"').replace(/url\(#([^)]+)\)/g,(_,id)=>'url(#'+prefix+id+')');}

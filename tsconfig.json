@@ -10,5 +10,12 @@
       "./node_modules/@figma"
     ]
   },
-  "files": ["core.ts", "palette-core.ts", "generated/assets.ts", "palette-registry.ts", "palette-figma.ts", "editor.ts", "export.ts", "scene-plan.ts", "semantics.ts", "code.ts"]
+  "files": [
+    "src/composition/types.ts", "src/composition/layout.ts", "src/composition/geometry.ts", "src/composition/names.ts",
+    "src/palette/model.ts", "generated/assets.ts", "src/palette/registry.ts", "src/palette/figma.ts",
+    "src/plugin/editor.ts", "src/plugin/svg-export.ts",
+    "src/scene/contract.ts", "src/scene/relations.ts", "src/scene/layout.ts",
+    "src/library/subjects.ts", "src/ai/prompt.ts", "src/ai/settings.ts", "src/ai/openrouter.ts", "src/ai/response.ts", "src/ai/planner.ts",
+    "src/plugin/main.ts"
+  ]
 }

@@ -1,9 +1,10 @@
+import {readSource} from './sources.mjs';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 
 const context=vm.createContext({});
-vm.runInContext(ts.transpile(readFileSync('core.ts','utf8')+'\n'+readFileSync('generated/assets.ts','utf8')+'\nglobalThis.library={assets:ASSETS,backdrops:BACKDROPS,palettes:PALETTE_LIBRARY};',{target:ts.ScriptTarget.ES2020}),context);
+vm.runInContext(ts.transpile(readSource('composition')+'\n'+readFileSync('generated/assets.ts','utf8')+'\nglobalThis.library={assets:ASSETS,backdrops:BACKDROPS,palettes:PALETTE_LIBRARY};',{target:ts.ScriptTarget.ES2020}),context);
 const {assets,backdrops,palettes}=context.library;
 const corpus=[['book'],['phone','puzzle'],['book','phone','coin'],['lamp','book','flowers'],['folder','wallet','coin'],['headphones','flowers'],['book','book','coin'],['pen','coin'],['wallet','coin','lamp'],['puzzle','book','pen'],['book','phone','coin','folder','wallet','pen'],['book','phone','coin','folder','wallet','pen','headphones','flowers']];
 const formats=[[1000,1000],[1200,630],[800,1200]];

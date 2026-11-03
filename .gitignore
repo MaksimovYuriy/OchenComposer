@@ -6,6 +6,7 @@ node_modules
 out/
 dist/
 code.js
+ui.html
 
 node_modules/
 .env

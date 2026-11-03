@@ -1,10 +1,11 @@
+import {readSource} from '../scripts/sources.mjs';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const context=vm.createContext({});
-vm.runInContext(ts.transpile(['core.ts','scene-plan.ts','semantics.ts','generated/assets.ts'].map(p=>readFileSync(p,'utf8')).join('\n')+'\nglobalThis.library=ASSETS;',{target:ts.ScriptTarget.ES2020}),context);
+vm.runInContext(ts.transpile(['composition','scene','ai','generated/assets.ts'].map(p=>readSource(p)).join('\n')+'\nglobalThis.library=ASSETS;',{target:ts.ScriptTarget.ES2020}),context);
 const example=JSON.parse(readFileSync('catalog/scene-plan.example.json','utf8'));
 const assets=context.library;
 const execute=(recipe,size='large',w=1000,h=1000,mode='color')=>context.composeAiScene(recipe,assets.filter(a=>a.role==='main'&&a.size===size),assets.filter(a=>a.role==='background'),w,h,0,mode);

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<style>/*__STYLES__*/</style>
+<body>
+<div class="tag">Итерация 6 · метафоры</div>
+<h1>Ochen Composer</h1>
+<div class="tabs"><button id="tab-build" data-active="true">Сборка</button><button id="tab-edit" data-active="false">Правка</button><button id="tab-palette" data-active="false">Палитра</button><button id="tab-export">SVG</button></div>
+<div id="status" role="status" aria-live="polite">Подготовка библиотеки…</div>
+<section id="build-panel">
+<label for="input-mode">Способ подбора</label>
+<select id="input-mode"><option value="names">Названия · без ИИ</option><option value="metaphor">Метафора или описание сцены · ИИ</option></select>
+<p id="ai-disclosure" class="small" hidden>ИИ интерпретирует смысл и выбирает подходящую выполнимую композицию, адаптируя детали. Объяснение появится под запросом. Наружу отправятся фраза, текстовые правила и каталог с размерами, формат и seed — без SVG и документа. До 2 API-запросов на сборку: второй только для исправления некорректного плана. «Новый вариант» запускает новый подбор.</p>
+<details style="margin-top:16px"><summary>Настройки ИИ · OpenRouter</summary>
+<p id="ai-key-status">Ключ не добавлен. Для названий ключ не нужен.</p>
+<label for="ai-key">Личный API-ключ</label><input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Ключ не добавлен">
+<label for="ai-model">Бесплатная модель</label><input id="ai-model" value="openrouter/free" spellcheck="false">
+<p class="small">openrouter/free выбирает доступную бесплатную модель; её ответы могут различаться. Можно указать конкретный ID с окончанием :free. Платного переключения нет.</p>
+<label style="font-weight:400"><input id="ai-remember" type="checkbox"> Запомнить ключ на этом устройстве</label>
+<p class="small">Без отметки ключ хранится до закрытия плагина. Сохранение использует настройки Figma, а не защищённый менеджер паролей.</p>
+<div class="row actions"><button id="ai-save">Применить настройки</button><button id="ai-test" disabled>Проверить ключ</button><button id="ai-delete" disabled>Удалить ключ</button></div>
+<p id="ai-feedback" role="status" aria-live="polite"></p>
+<p class="small">Создайте ключ на <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>, вставьте и примените настройки. Бесплатные модели ограничены квотами и могут быть недоступны. Проверка ключа не проверяет качество модели.</p>
+</details>
+<label for="query">Что должно быть в композиции</label>
+<textarea id="query" maxlength="1000" placeholder="Книга, телефон, монета">Книга, телефон, монета</textarea>
+<p id="catalog" class="small">Загружаем каталог…</p>
+<p id="ai-result" class="small" hidden></p>
+<div class="row"><div><label for="format">Формат</label><select id="format"><option value="square">1000 × 1000</option><option value="landscape">1200 × 630</option><option value="portrait">800 × 1200</option></select></div><div><label for="size">Детализация</label><select id="size"><option value="large">L — large</option><option value="small">S — small</option></select></div></div>
+<div class="row"><div><label for="template">Схема</label><select id="template"><option value="auto">Автоматически</option><option value="diagonal">Диагональ</option><option value="focus">Главный и акценты</option><option value="terrace">Верхний план</option></select></div><div><label for="seed">Seed</label><input id="seed" type="number" min="0" max="2147483647" step="1" value="0"></div></div>
+<label for="state-mode">Состояния при сборке</label>
+<select id="state-mode"><option value="color">Цветные предметы</option><option value="mixed">Смешанные: часть акцентов монохромные</option><option value="mono">Все предметы монохромные</option></select>
+<label style="font-weight:400"><input type="checkbox" id="background-duplicate" checked> Фоновый дубль первого предмета · только названия</label>
+<p>Палитра новой сцены: <strong id="build-palette-name">Фиолетовая</strong>. <button id="choose-palette" style="padding:3px 7px">Выбрать</button></p>
+<div class="row actions"><button id="compose" class="primary" disabled>Собрать</button><button id="variant" disabled>Новый вариант</button></div>
+<div id="names-notes"><p class="small">До 8 предметов через запятую или перенос строки. Повтор названия добавляет экземпляр. Повороты автоматические; у лампы и цветов угол 0°. Масштаб сцены общий.</p>
+<p class="small">Автоматически выбирается наиболее сбалансированная раскладка. Первый предмет задаёт фокус; размеры предметов относительно друг друга сохраняются. Новый вариант меняет расположение и создаёт отдельный фрейм. Для сцены без монохромных предметов выберите «Цветные» и отключите дубль.</p></div>
+
+</section>
+<section id="edit-panel" hidden>
+<p id="scene-name">Выберите композицию или её предмет в Figma.</p>
+<p id="scene-palette-name" class="small"></p>
+<h2>Выбранный предмет</h2>
+<p id="selected-asset">Выберите один предмет композиции в Figma.</p>
+<div class="row actions"><button id="state-main" disabled>Цветной</button><button id="state-background" disabled>Монохромный</button></div>
+<div class="row move actions"><button id="move-left" aria-label="Влево на 10 пикселей" disabled>←</button><button id="move-up" aria-label="Вверх на 10 пикселей" disabled>↑</button><button id="move-down" aria-label="Вниз на 10 пикселей" disabled>↓</button><button id="move-right" aria-label="Вправо на 10 пикселей" disabled>→</button></div>
+<div class="row"><div><label for="edit-angle">Угол по часовой стрелке</label><input id="edit-angle" type="number" min="-360" max="360" step="1" value="0"></div><div><label>&nbsp;</label><button id="rotate" style="width:100%" disabled>Повернуть</button></div></div>
+<div class="row actions"><button id="duplicate" disabled>Дублировать</button><button id="delete" class="danger" disabled>Удалить</button></div>
+<div class="row actions"><button id="raise" disabled>На слой выше</button><button id="lower" disabled>На слой ниже</button></div>
+<p class="small">Стрелки сдвигают на 10 px. Команды не пересобирают соседей. Смена состояния заменяет вложенную графику исходником, сохраняя трансформации.</p>
+<div class="section"><h2>Добавить в эту композицию</h2>
+<div class="row"><div><label for="add-name">Название</label><input id="add-name" placeholder="Например, монета"></div><div><label for="add-state">Состояние</label><select id="add-state"><option value="main">Цветной</option><option value="background">Монохромный</option></select></div></div>
+<div class="row actions"><button id="add" disabled>Добавить предмет</button></div>
+<p class="small">L/S и масштаб берутся из сцены. Если свободного места нет, команда отменяется. Вложенные пользовательские группы сначала разгруппируйте до уровня композиции.</p>
+</div></section>
+<section id="palette-panel" hidden>
+<h2>Цветовая схема</h2>
+<label for="palette-select">Для следующей сборки или выбранной сцены</label>
+<select id="palette-select"></select>
+<div id="palette-swatches" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px"></div>
+<p id="palette-warnings" class="small"></p>
+<button id="apply-palette" class="primary" style="width:100%;margin-top:14px" disabled>Применить к выбранной композиции</button>
+<p id="palette-target" class="small">Выберите композицию или один её предмет в Figma.</p>
+<p class="small">Выбор схемы задаёт цвета новой сборки. Кнопка перекрашивает только выбранную композицию, сохраняя предметы, позиции, углы и слои. Ручные цвета заменяются исходными цветовыми ролями.</p>
+<div class="section"><h2>Загрузить свою палитру</h2>
+<p>JSON с восемью подписанными ролями. Загрузите пример, измените HEX и импортируйте файл с новым id.</p>
+<button id="palette-example" style="width:100%">Скачать JSON-пример</button>
+<label for="palette-file">Файл палитры · до 32 КБ</label>
+<input id="palette-file" type="file" accept=".json,application/json">
+<p class="small">surface / mid / deep / paper доступны фону и предметам. accentLight / accentStrong / accentSoft / ink — только цветным предметам. Связанные стили, переменные и неизвестные цвета без сохранённых ролей требуют возврата к исходной структуре.</p>
+<p class="small">До 10 личных схем сохраняются в настройках плагина. Палитра композиции хранится также внутри документа; после перезапуска её можно продолжать использовать. Повторный импорт того же личного id обновляет запись, не перекрашивая старые сцены.</p>
+</div>
+</section>
+<section id="export-panel" hidden>
+<h2>Скачать композицию</h2>
+<p id="export-target">Выберите композицию или её предмет в Figma.</p>
+<button id="export-svg" class="primary" disabled>Подготовить SVG</button>
+<p>Экспортируется текущее состояние: цвета, расположение, повороты и порядок слоёв. Каждый предмет сохраняется отдельной векторной группой.</p>
+<p id="export-info" class="small"></p>
+<a id="export-download" hidden>Скачать SVG</a>
+<p class="small">После изменений подготовьте файл заново. Для проверки перетащите скачанный SVG обратно в Figma и проверьте отдельные предметы.</p>
+</section>
+<script>/*__SCRIPT__*/</script>
+</body></html>

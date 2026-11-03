@@ -1,3 +1,4 @@
+import {readSource} from '../scripts/sources.mjs';
 import { readFileSync, readdirSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
@@ -5,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const context = vm.createContext({});
-vm.runInContext(ts.transpile(readFileSync(new URL('../core.ts', import.meta.url), 'utf8'), { target: ts.ScriptTarget.ES2020 }), context);
+vm.runInContext(ts.transpile(readSource('composition'), { target: ts.ScriptTarget.ES2020 }), context);
 const rotationPolicy = JSON.parse(readFileSync(new URL('../catalog/rotation-policy.json', import.meta.url), 'utf8'));
 const names = ['book','wallet','lamp','coin','headphones','puzzle','folder','pen','phone','flowers'];
 function bounds(p) {
