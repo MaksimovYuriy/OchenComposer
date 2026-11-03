@@ -49,6 +49,14 @@ module.exports = tseslint.config(
     rules:{'@typescript-eslint/no-unused-vars':['error',{varsIgnorePattern:'^(prepareSvgExport|SvgExport)$'}]},
   },
   {
+    files:['scene-plan.ts'],
+    rules:{'@typescript-eslint/no-unused-vars':['error',{varsIgnorePattern:'^(SemanticPlan|validateSemanticPlan|composeAiScene)$'}]},
+  },
+  {
+    files:['semantics.ts'],
+    rules:{'@typescript-eslint/no-unused-vars':['error',{varsIgnorePattern:'^(SEMANTIC_VERSION|sendSemanticSettings|loadSemanticSettings|configureSemanticSettings|deleteSemanticSettings|interpretMetaphor)$'}]},
+  },
+  {
     ignores: ['code.js', 'out/**', 'generated/**', 'scripts/**', 'tests/**', 'dist', 'eslint.config.js'],
   },
 )

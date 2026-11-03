@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "items": [
+    {"instanceId":"i1","assetId":"book","x":0.18,"y":0.52,"rotation":0,"layer":0,"on":null},
+    {"instanceId":"i2","assetId":"book","x":0.5,"y":0.52,"rotation":0,"layer":1,"on":null},
+    {"instanceId":"i3","assetId":"book","x":0.82,"y":0.52,"rotation":0,"layer":2,"on":null},
+    {"instanceId":"i4","assetId":"phone","x":0.5,"y":0.4,"rotation":0,"layer":3,"on":"i1"},
+    {"instanceId":"i5","assetId":"coin","x":0.5,"y":0.4,"rotation":0,"layer":4,"on":"i2"}
+  ],
+  "explanation": "Три книги: телефон на первой, монета на второй, третья без предметов."
+}

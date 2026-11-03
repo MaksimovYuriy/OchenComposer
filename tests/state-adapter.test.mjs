@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {palettePrelude,paletteLibrary} from './palette-fixture.mjs';
 
-function session(){
+function session(options={}){
   let fail=false;
   let exportFailure=false,exported;
   let sequence=0;
@@ -21,6 +21,7 @@ function session(){
       appendChild(child){this.insertChild(this.children.length,child);},
       remove(){this.parent.children.splice(this.parent.children.indexOf(this),1);this.removed=true;},
       rescale(scale){this.width*=scale;this.height*=scale;},
+      resize(width,height){this.width=width;this.height=height;},
       on(event,callback){events[event]=callback;},off(event){delete events[event];},
       clone(){const copy=node(this.type,this.width,this.height);copy.relativeTransform=this.relativeTransform.map(row=>[...row]);copy.name=this.name;
         copy.fills=JSON.parse(JSON.stringify(this.fills));copy.strokes=JSON.parse(JSON.stringify(this.strokes));
@@ -35,20 +36,64 @@ function session(){
   source.setPluginData('ochen-asset-id','book');source.setPluginData('ochen-variant','large');source.setPluginData('ochen-role','main');source.setPluginData('ochen-state','main');
   const messages=[];
   const figma={showUI(){},on(){},currentPage:{...page,selection:[source]},ui:{postMessage:m=>messages.push(m)},
+    clientStorage:{async getAsync(){},async setAsync(){},async deleteAsync(){}},
+    viewport:{center:{x:0,y:0},scrollAndZoomIntoView(){}},
+    createFrame(){const frame=node();page.appendChild(frame);return frame;},
     createNodeFromSvg(){if(fail)throw new Error('Import failed');const root=node(),leaf=node('VECTOR');
       leaf.fills=[{type:'SOLID',color:{r:215/255,g:205/255,b:245/255},opacity:.7}];root.appendChild(leaf);return root;}};
   // Ensure ancestry and current-page identity match the real document tree.
   figma.currentPage=page;page.selection=[source];
   const asset={id:'book',name:'Книга',size:'large',width:800,height:400,svg:'<svg/>',source:'test'};
-  const context=vm.createContext({figma,__html__:'',console,setTimeout,clearTimeout});
+  const context=vm.createContext({figma,__html__:'',console,setTimeout,clearTimeout,fetch:options.fetch});
   vm.runInContext(palettePrelude,context);
   vm.runInContext(ts.transpile(readFileSync(new URL('../core.ts',import.meta.url),'utf8')+
-    '\nconst ASSETS = '+JSON.stringify([{...asset,role:'main'},{...asset,role:'background'}])+';const BACKDROPS=[];\n'+
+    '\nconst ASSETS = '+JSON.stringify([{...asset,role:'main'},{...asset,role:'background'}])+';const BACKDROPS=[{size:"large",svg:"<svg/>",width:1000,height:1000}];\n'+
     readFileSync(new URL('../editor.ts',import.meta.url),'utf8')+'\n'+
     readFileSync(new URL('../export.ts',import.meta.url),'utf8')+'\n'+
+    readFileSync(new URL('../scene-plan.ts',import.meta.url),'utf8')+'\n'+
+    readFileSync(new URL('../semantics.ts',import.meta.url),'utf8')+'\n'+
     readFileSync(new URL('../code.ts',import.meta.url),'utf8'),{target:ts.ScriptTarget.ES2020}),context);
   return {figma,frame,source,other,messages,node,events,failImport:()=>fail=true,failExport:()=>exportFailure=true,exported:()=>exported};
 }
+
+test('AI scene flow builds validated instances, preserves prior scenes, and requests a new plan for a variant',async()=>{
+ let calls=0;
+ const s=session({fetch:async()=>{calls++;return {ok:true,text:async()=>JSON.stringify({model:'test:free',choices:[{finish_reason:'stop',message:{content:JSON.stringify({status:'ok',items:[{instanceId:'i1',assetId:'book',x:.5,y:.5,rotation:0,layer:0,on:null}],explanation:'Учиться.'})}}]})}}});
+ await s.figma.ui.onmessage({type:'ai-configure',key:'test-secret',model:'openrouter/free',remember:false});
+ const request={type:'compose-metaphor',text:'Знания',size:'large',format:'square',template:'auto',seed:0,stateMode:'color',backgroundDuplicate:false};
+ await s.figma.ui.onmessage(request);
+ assert.equal(calls,1);assert.equal(s.figma.currentPage.children.length,2);
+ const created=s.figma.currentPage.selection[0];assert.equal(created.getPluginData('ochen-composition'),'1');
+ assert.ok(created.getPluginData('ochen-interpretation').includes('Учиться.'));
+ assert.ok(!JSON.stringify(created.getPluginDataKeys().map(k=>created.getPluginData(k))).includes('test-secret'));
+ assert.ok(!s.messages.some(m=>m.type==='error'));assert.equal(s.frame.removed,false);
+ await s.figma.ui.onmessage({...request,seed:1,reuseInterpretation:true});
+ assert.equal(calls,2);assert.equal(s.figma.currentPage.children.length,3);assert.equal(created.removed,false);
+});
+
+test('Check key configures the supplied draft before authenticating and returns visible errors',async()=>{
+ for(const status of [200,401]){
+  let authorization;
+  const s=session({fetch:async(url,request)=>{assert.equal(url,'https://openrouter.ai/api/v1/key');authorization=request.headers.Authorization;return {ok:status===200,status,text:async()=>'{"data":{}}'};}});
+  await s.figma.ui.onmessage({type:'ai-test',key:'draft-secret',model:'openrouter/free',remember:false});
+  assert.equal(authorization,'Bearer draft-secret');assert.ok(s.messages.some(m=>m.type===(status===200?'success':'error')));
+  assert.equal(s.messages.at(-1).value,false);assert.ok(!JSON.stringify(s.messages).includes('draft-secret'));
+ }
+});
+
+test('Unsupported/invalid model output and page changes do not create partial scenes',async()=>{
+ for(const kind of ['unsupported','unknown','page']){
+  let finish;
+  const s=session({fetch:()=>new Promise(resolve=>{finish=resolve;})});
+  await s.figma.ui.onmessage({type:'ai-configure',key:'test-secret',model:'openrouter/free',remember:false});
+  const pending=s.figma.ui.onmessage({type:'compose-metaphor',text:'test',size:'large',format:'square',template:'auto',seed:0,stateMode:'color',backgroundDuplicate:false});
+  await Promise.resolve();await Promise.resolve();
+  if(kind==='page'){s.figma.currentPage=s.node('PAGE');s.figma.currentPage.selection=[];}
+  const plan=kind==='unsupported'?{status:'unsupported',items:[],explanation:'Нет объекта.'}:{status:'ok',items:[{instanceId:'i1',assetId:kind==='unknown'?'dragon':'book',x:.5,y:.5,rotation:0,layer:0,on:null}],explanation:'Test'};
+  finish({ok:true,text:async()=>JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(plan)}}]})});
+  await pending;assert.ok(s.messages.some(m=>m.type==='error'));assert.equal(s.frame.removed,false);assert.equal(s.frame.parent.children.length,1);
+ }
+});
 
 test('Export snapshots current transforms, colors and separate group names without modifying the scene',async()=>{
  const s=session();s.frame.name='My: scene';s.source.fills=[{type:'SOLID',color:{r:.2,g:.3,b:.4}}];

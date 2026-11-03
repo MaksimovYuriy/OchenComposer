@@ -12,7 +12,8 @@
   "ui": "ui.html",
   "networkAccess": {
     "allowedDomains": [
-      "none"
-    ]
+      "https://openrouter.ai"
+    ],
+    "reasoning": "Анализ метафоры и текстового каталога по личному API-ключу пользователя. SVG и документ не отправляются."
   }
 }

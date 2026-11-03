@@ -1,27 +1,43 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ru">
 <meta charset="utf-8">
 <style>
 *{box-sizing:border-box}body{margin:0;padding:20px;font:12px/1.5 Inter,system-ui,sans-serif;color:var(--figma-color-text,#222);background:var(--figma-color-bg,#fff)}h1{font-size:23px;letter-spacing:-.7px;margin:0}h2{font-size:14px;margin:20px 0 8px}p{color:var(--figma-color-text-secondary,#777);margin:8px 0}label{display:block;margin:14px 0 5px;font-weight:600}input,textarea,select,button{font:inherit;border-radius:7px;border:1px solid var(--figma-color-border,#ddd);padding:9px;color:inherit;background:var(--figma-color-bg,#fff)}input:not([type=checkbox]),select,textarea{width:100%}textarea{resize:vertical;min-height:80px}.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}.primary{background:#6654e8;border-color:#6654e8;color:white}.actions{margin:12px 0}.danger{color:var(--figma-color-text-danger,#bd3341)}#status{padding:10px;margin:12px 0;background:var(--figma-color-bg-secondary,#f5f5f7);border-radius:7px;overflow-wrap:anywhere}#status[data-error=true]{color:var(--figma-color-text-danger,#c33)}.tag{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--figma-color-text-secondary,#777);margin-bottom:5px}.tabs{display:flex;gap:8px;margin-top:16px}.tabs button{flex:1}.tabs button[data-active=true]{background:#6654e8;color:white;border-color:#6654e8}[hidden]{display:none!important}.small{font-size:11px}.move button{font-size:16px;padding:6px}.section{border-top:1px solid var(--figma-color-border,#ddd);margin-top:16px;padding-top:2px}
 </style>
 <body>
-<div class="tag">Итерация 5A · композиция</div>
+<div class="tag">Итерация 6 · метафоры</div>
 <h1>Ochen Composer</h1>
 <div class="tabs"><button id="tab-build" data-active="true">Сборка</button><button id="tab-edit" data-active="false">Правка</button><button id="tab-palette" data-active="false">Палитра</button><button id="tab-export">SVG</button></div>
 <div id="status" role="status" aria-live="polite">Подготовка библиотеки…</div>
 <section id="build-panel">
+<label for="input-mode">Способ подбора</label>
+<select id="input-mode"><option value="names">Названия · без ИИ</option><option value="metaphor">Метафора или описание сцены · ИИ</option></select>
+<p id="ai-disclosure" class="small" hidden>ИИ возвращает экземпляры, позиции, повороты и слои. Поддерживается «на книге / на папке». Наружу отправятся фраза и текстовый каталог с размерами предметов, формат и seed — без SVG, примеров и документа. Каждая сборка и «Новый вариант» расходуют запрос. Дубли и раскладку здесь задаёт план ИИ.</p>
+<details style="margin-top:16px"><summary>Настройки ИИ · OpenRouter</summary>
+<p id="ai-key-status">Ключ не добавлен. Для названий ключ не нужен.</p>
+<label for="ai-key">Личный API-ключ</label><input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Ключ не добавлен">
+<label for="ai-model">Бесплатная модель</label><input id="ai-model" value="openrouter/free" spellcheck="false">
+<p class="small">openrouter/free выбирает доступную бесплатную модель; её ответы могут различаться. Можно указать конкретный ID с окончанием :free. Платного переключения нет.</p>
+<label style="font-weight:400"><input id="ai-remember" type="checkbox"> Запомнить ключ на этом устройстве</label>
+<p class="small">Без отметки ключ хранится до закрытия плагина. Сохранение использует настройки Figma, а не защищённый менеджер паролей.</p>
+<div class="row actions"><button id="ai-save">Применить настройки</button><button id="ai-test" disabled>Проверить ключ</button><button id="ai-delete" disabled>Удалить ключ</button></div>
+<p id="ai-feedback" role="status" aria-live="polite"></p>
+<p class="small">Создайте ключ на <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>, вставьте и примените настройки. Бесплатные модели ограничены квотами и могут быть недоступны. Проверка ключа не проверяет качество модели.</p>
+</details>
 <label for="query">Что должно быть в композиции</label>
 <textarea id="query" maxlength="1000" placeholder="Книга, телефон, монета">Книга, телефон, монета</textarea>
 <p id="catalog" class="small">Загружаем каталог…</p>
+<p id="ai-result" class="small" hidden></p>
 <div class="row"><div><label for="format">Формат</label><select id="format"><option value="square">1000 × 1000</option><option value="landscape">1200 × 630</option><option value="portrait">800 × 1200</option></select></div><div><label for="size">Детализация</label><select id="size"><option value="large">L — large</option><option value="small">S — small</option></select></div></div>
 <div class="row"><div><label for="template">Схема</label><select id="template"><option value="auto">Автоматически</option><option value="diagonal">Диагональ</option><option value="focus">Главный и акценты</option><option value="terrace">Верхний план</option></select></div><div><label for="seed">Seed</label><input id="seed" type="number" min="0" max="2147483647" step="1" value="0"></div></div>
 <label for="state-mode">Состояния при сборке</label>
 <select id="state-mode"><option value="color">Цветные предметы</option><option value="mixed">Смешанные: часть акцентов монохромные</option><option value="mono">Все предметы монохромные</option></select>
-<label style="font-weight:400"><input type="checkbox" id="background-duplicate" checked> Фоновый дубль первого предмета</label>
+<label style="font-weight:400"><input type="checkbox" id="background-duplicate" checked> Фоновый дубль первого предмета · только названия</label>
 <p>Палитра новой сцены: <strong id="build-palette-name">Фиолетовая</strong>. <button id="choose-palette" style="padding:3px 7px">Выбрать</button></p>
 <div class="row actions"><button id="compose" class="primary" disabled>Собрать</button><button id="variant" disabled>Новый вариант</button></div>
-<p class="small">До 8 предметов через запятую или перенос строки. Повтор названия добавляет экземпляр. Повороты автоматические; у лампы и цветов угол 0°. Масштаб сцены общий.</p>
-<p class="small">Автоматически выбирается наиболее сбалансированная раскладка. Первый предмет задаёт фокус; размеры предметов относительно друг друга сохраняются. Новый вариант меняет расположение и создаёт отдельный фрейм. Для сцены без монохромных предметов выберите «Цветные» и отключите дубль.</p>
+<div id="names-notes"><p class="small">До 8 предметов через запятую или перенос строки. Повтор названия добавляет экземпляр. Повороты автоматические; у лампы и цветов угол 0°. Масштаб сцены общий.</p>
+<p class="small">Автоматически выбирается наиболее сбалансированная раскладка. Первый предмет задаёт фокус; размеры предметов относительно друг друга сохраняются. Новый вариант меняет расположение и создаёт отдельный фрейм. Для сцены без монохромных предметов выберите «Цветные» и отключите дубль.</p></div>
+
 </section>
 <section id="edit-panel" hidden>
 <p id="scene-name">Выберите композицию или её предмет в Figma.</p>
@@ -69,8 +85,23 @@
 <script>
 const el=id=>document.getElementById(id);
 let ready=false,busy=false,selectedAsset=null,selectedScene=null;
+let hasAiKey=false;
+let pendingAiAction=null;
 let paletteEntries=[],chosenPaletteKey='builtin:violet';
 function send(message){parent.postMessage({pluginMessage:message},'*')}
+el('input-mode').onchange=()=>{el('ai-disclosure').hidden=el('input-mode').value!=='metaphor';el('names-notes').hidden=el('input-mode').value==='metaphor';el('query').placeholder=el('input-mode').value==='metaphor'?'Например, три книги: на первой телефон, на второй монета':'Книга, телефон, монета';el('ai-result').hidden=true;update()};
+function aiAction(action){
+ if(busy)return;
+ const settings={key:el('ai-key').value,model:el('ai-model').value.trim(),remember:el('ai-remember').checked};
+ pendingAiAction=action;busy=true;
+ const text=action==='test'?'Проверяем ключ OpenRouter… Ожидание до 10 секунд.':action==='delete'?'Удаляем ключ…':'Применяем настройки ИИ…';
+ el('ai-feedback').textContent=text;el('ai-feedback').style.color='';el('status').textContent=text;el('status').dataset.error='false';update();
+ send({type:action==='save'?'ai-configure':'ai-'+action,...(action==='delete'?{}:settings)});
+ el('ai-key').value='';
+}
+el('ai-save').onclick=()=>aiAction('save');
+['test','delete'].forEach(action=>el('ai-'+action).onclick=()=>aiAction(action));
+el('ai-key').oninput=update;
 function tab(name){['build','edit','palette','export'].forEach(id=>{el(id+'-panel').hidden=name!==id;el('tab-'+id).dataset.active=String(name===id)})}
 el('tab-export').onclick=()=>tab('export');
 let exportUrl=null;
@@ -135,9 +166,14 @@ el('palette-file').onchange=async()=>{
  finally{el('palette-file').value='';}
 };
 function update(){
+ const metaphor=el('input-mode').value==='metaphor';
+ ['input-mode','query','format','size','template','seed','state-mode','background-duplicate','ai-key','ai-model','ai-remember'].forEach(id=>el(id).disabled=busy);
+ el('template').disabled=busy||metaphor;el('background-duplicate').disabled=busy||metaphor;
+ el('ai-save').disabled=busy||(!hasAiKey&&!el('ai-key').value.trim());el('ai-test').disabled=busy||(!hasAiKey&&!el('ai-key').value.trim());el('ai-delete').disabled=busy;
+ el('ai-test').textContent=pendingAiAction==='test'?'Проверяем…':'Проверить ключ';
  el('export-svg').disabled=busy||!selectedScene;
  el('export-target').textContent=selectedScene?'Выбрана: '+selectedScene.name:'Выберите композицию или её предмет в Figma.';
- const disabled=!ready||busy||!el('query').value.trim();el('compose').disabled=disabled;el('variant').disabled=disabled;
+ const disabled=!ready||busy||!el('query').value.trim()||(metaphor&&!hasAiKey);el('compose').disabled=disabled;el('variant').disabled=disabled;
  el('state-main').disabled=busy||!selectedAsset||selectedAsset.state==='main';
  el('state-background').disabled=busy||!selectedAsset||selectedAsset.state==='background';
  el('add').disabled=busy||!selectedScene||!el('add-name').value.trim();
@@ -147,10 +183,12 @@ function update(){
 }
 el('query').oninput=update;
 function compose(next){
+ if(busy)return;
  let seed=Number(el('seed').value);
  if(!el('seed').value.trim()||!Number.isInteger(seed)||seed<0||seed>2147483647){el('status').textContent='Seed: целое число от 0 до 2147483647.';el('status').dataset.error='true';return}
  if(next)seed=seed===2147483647?0:seed+1;el('seed').value=String(seed);busy=true;update();el('status').textContent='Собираем композицию…';el('status').dataset.error='false';
- send({type:'compose',text:el('query').value,format:el('format').value,size:el('size').value,backgroundDuplicate:el('background-duplicate').checked,template:el('template').value,seed,stateMode:el('state-mode').value,palette:currentPalette()});
+ el('ai-result').hidden=true;
+ send({type:el('input-mode').value==='metaphor'?'compose-metaphor':'compose',text:el('query').value,format:el('format').value,size:el('size').value,backgroundDuplicate:el('background-duplicate').checked,template:el('template').value,seed,stateMode:el('state-mode').value,palette:currentPalette()});
 }
 el('compose').onclick=()=>compose(false);el('variant').onclick=()=>compose(true);
 function setState(state){busy=true;update();send({type:'set-state',state})}
@@ -162,6 +200,8 @@ el('add-name').oninput=update;el('add').onclick=()=>edit('add',{name:el('add-nam
 el('rotate').onclick=()=>{const value=el('edit-angle').value,angle=Number(value);if(!value.trim()||!Number.isFinite(angle)||Math.abs(angle)>360){el('status').textContent='Угол должен быть от −360° до 360°.';el('status').dataset.error='true';return}edit('rotate',{angle})};
 window.onmessage=event=>{
  const msg=event.data.pluginMessage;if(!msg||typeof msg.type!=='string')return;
+ if(msg.type==='ai-settings'){hasAiKey=msg.hasKey;el('ai-key').value='';el('ai-key').placeholder=hasAiKey?'Ключ добавлен · можно заменить':'Ключ не добавлен';el('ai-model').value=msg.model;el('ai-remember').checked=msg.remember;el('ai-key-status').textContent=hasAiKey?(msg.remember?'Ключ сохранён на этом устройстве.':'Ключ добавлен до закрытия плагина.'):'Ключ не добавлен. Для названий ключ не нужен.';update()}
+ if(msg.type==='ai-result'){el('ai-result').textContent=msg.explanation+' Выбраны: '+msg.names.join(', ')+'. Модель: '+msg.model;el('ai-result').hidden=false}
  if(msg.type==='catalog'){ready=true;el('catalog').textContent='Доступны: '+msg.names.join(', ')+'.';el('status').textContent='Библиотека готова.';update()}
  if(msg.type==='busy'){busy=msg.value;update()}
  if(msg.type==='svg-export'){
@@ -180,7 +220,7 @@ window.onmessage=event=>{
   const preferred=selectedScene?.palette&&selectedScene.id!==previousSceneId?paletteOptions().find(e=>samePalette(e.palette,selectedScene.palette))?.key:undefined;
   renderPalettes(preferred);update();
  }
- if(msg.type==='error'||msg.type==='success'){el('status').textContent=msg.message;el('status').dataset.error=String(msg.type==='error')}
+ if(msg.type==='error'||msg.type==='success'){el('status').textContent=msg.message;el('status').dataset.error=String(msg.type==='error');if(pendingAiAction){el('ai-feedback').textContent=msg.message;el('ai-feedback').style.color=msg.type==='error'?'var(--figma-color-text-danger,#c33)':'';pendingAiAction=null;update()}}
 };
 send({type:'catalog'});
 </script>

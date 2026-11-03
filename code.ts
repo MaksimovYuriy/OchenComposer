@@ -3,6 +3,7 @@ let busy = false;
 let previousResult: FrameNode | undefined;
 let trackedScene: FrameNode | undefined;
 let documentRefresh: number | undefined;
+const semanticReady=loadSemanticSettings();
 function selectedAssetNode(): FrameNode | undefined {
   if (figma.currentPage.selection.length !== 1) return;
   let node: BaseNode | null = figma.currentPage.selection[0];
@@ -101,6 +102,20 @@ figma.ui.onmessage = async (message: unknown) => {
     sendPaletteCatalog();
     void loadPersonalPalettes();
     sendSelectionState();
+    void semanticReady.then(sendSemanticSettings);
+    return;
+  }
+  if(['ai-configure','ai-delete','ai-test'].includes(String(request.type))&&!busy){
+    busy=true;figma.ui.postMessage({type:'busy',value:true});
+    try{
+      await semanticReady;
+      if(request.type==='ai-configure')await configureSemanticSettings(request);
+      if(request.type==='ai-test'&&('key' in request||'model' in request))await configureSemanticSettings(request);
+      if(request.type==='ai-delete')await deleteSemanticSettings();
+      if(request.type==='ai-test'){await semanticApi('key',undefined,10000);figma.ui.postMessage({type:'success',message:'Ключ принят OpenRouter. Доступность конкретной модели проверяется при обработке метафоры.'});}
+      else figma.ui.postMessage({type:'success',message:request.type==='ai-delete'?'Ключ удалён.':'Настройки ИИ применены.'});
+    }catch(error){figma.ui.postMessage({type:'error',message:error instanceof Error?error.message:'Не удалось обновить настройки ИИ.'});}
+    finally{busy=false;figma.ui.postMessage({type:'busy',value:false});}
     return;
   }
   if(request.type==='export-svg'&&!busy){
@@ -149,7 +164,7 @@ figma.ui.onmessage = async (message: unknown) => {
     }
     return;
   }
-  if (request.type !== 'compose' || busy) return;
+  if ((request.type !== 'compose'&&request.type!=='compose-metaphor') || busy) return;
   busy = true;
   figma.ui.postMessage({ type: 'busy', value: true });
   let frame: FrameNode | undefined;
@@ -161,16 +176,30 @@ figma.ui.onmessage = async (message: unknown) => {
     const [width, height] = formats[request.format];
     const palette=requestedPalette(request.palette);
     const candidates = ASSETS.filter(asset => asset.role === 'main' && asset.size === request.size);
-    const selected = resolveNames(request.text, candidates);
     const stateMode = request.stateMode === undefined ? 'color' : request.stateMode;
     if (stateMode !== 'color' && stateMode !== 'mixed' && stateMode !== 'mono') throw new Error('Выберите режим состояний предметов.');
     if (typeof request.backgroundDuplicate !== 'boolean') throw new Error('Некорректная настройка фона.');
     if (typeof request.template !== 'string' || typeof request.seed !== 'number') throw new Error('Выберите схему и seed.');
-    const plan = composeScene(selected, ASSETS.filter(a => a.role === 'background'), request.backgroundDuplicate,
-      width, height, request.template, request.seed, stateMode);
+    // Validate local composition settings before using any API quota.
+    if(!['auto','diagonal','focus','terrace'].includes(request.template)||!Number.isInteger(request.seed)||request.seed<0||request.seed>2147483647)throw new Error('Проверьте схему и seed.');
+    let interpretation:{plan:SemanticPlan;model:string}|undefined;
+    let selected:Asset[];
+    if(request.type==='compose-metaphor'){
+      await semanticReady;
+      const page=figma.currentPage;
+      interpretation=await interpretMetaphor(request.text,{width,height,size:request.size,seed:request.seed,geometry:candidates.map(a=>({id:a.id,width:a.width,height:a.height,rotationAngles:a.rotationAngles||[0]}))});
+      if(figma.currentPage!==page)throw new Error('Страница изменилась во время запроса. Повторите сборку на нужной странице.');
+      if(interpretation.plan.status==='unsupported')throw new Error(interpretation.plan.explanation);
+      selected=interpretation.plan.items.map(item=>{
+        const asset=candidates.find(a=>a.id===item.assetId);if(!asset)throw new Error('Для выбранного предмета нет исходника L/S.');return asset;
+      });
+    }else selected=resolveNames(request.text,candidates);
+    const duplicate=interpretation?false:request.backgroundDuplicate;
+    const plan = interpretation?composeAiScene(interpretation.plan,candidates,ASSETS.filter(a=>a.role==='background'),width,height,request.seed,stateMode)
+      :composeScene(selected, ASSETS.filter(a => a.role === 'background'), duplicate,width, height, request.template, request.seed, stateMode);
     const placements = plan.placements;
     frame = figma.createFrame();
-    frame.name = `Ochen — ${selected.map(asset => asset.name).join(', ')} · ${plan.template} #${plan.seed}`;
+    frame.name = `Ochen — ${selected.map(asset => asset.name).join(', ')} · ${interpretation?'AI':plan.template} #${plan.seed}`;
     frame.resize(width, height);
     frame.clipsContent = false;
     frame.fills = [];
@@ -186,8 +215,9 @@ figma.ui.onmessage = async (message: unknown) => {
     frame.setPluginData('ochen-scene-scale', String(placements[0].scale));
     frame.setPluginData('ochen-detail', request.size);
     frame.setPluginData('ochen-palette',JSON.stringify(palette));
+    if(interpretation)frame.setPluginData('ochen-interpretation',JSON.stringify({version:SEMANTIC_VERSION,model:interpretation.model,...interpretation.plan}));
     frame.setPluginData('ochen-plan', JSON.stringify({ version: 2, ids: selected.map(a => a.id), size: request.size,
-      width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: request.backgroundDuplicate, stateMode, palette, quality:plan.quality,
+      width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: duplicate, stateMode, palette, quality:plan.quality,
       placements: placements.map(p => ({ id: p.asset.id, state: p.asset.role, role: p.role, rotation: p.rotation,
         pivot: p.pivot, scale: p.scale, transform: p.transform, order: p.order })) }));
     {
@@ -224,11 +254,13 @@ figma.ui.onmessage = async (message: unknown) => {
       frame.appendChild(node);
       node.name = placement.role === 'background' ? `Фоновый дубль — ${placement.asset.name}`
         : `${placement.asset.name}${placement.asset.role === 'background' ? ' — монохромный' : ''}`;
+      if(interpretation)node.name+=' · '+[...interpretation.plan.items].sort((a,b)=>a.layer-b.layer)[placement.order].instanceId;
       node.setPluginData('ochen-asset-id', placement.asset.id);
       node.setPluginData('ochen-variant', placement.asset.size);
       node.setPluginData('ochen-role', placement.role);
       node.setPluginData('ochen-state', placement.asset.role);
       node.setPluginData('ochen-generated-rotation', String(placement.rotation));
+      if(interpretation){const item=[...interpretation.plan.items].sort((a,b)=>a.layer-b.layer)[placement.order];node.setPluginData('ochen-recipe-instance',item.instanceId);node.setPluginData('ochen-recipe-on',item.on||'');}
       recolorTree(node,palette,placement.asset.role==='background'?'monochrome':'object');
       node.rescale(placement.scale);
       node.relativeTransform = placement.transform;
@@ -238,11 +270,11 @@ figma.ui.onmessage = async (message: unknown) => {
     previousResult = frame;
     trackedScene = frame;
     syncCurrentScene(frame);
+    if(interpretation)figma.ui.postMessage({type:'ai-result',explanation:interpretation.plan.explanation,names:selected.map(a=>a.name),model:interpretation.model});
     figma.ui.postMessage({ type: 'success', seed: plan.seed, template: plan.template,
-      message: `Предметов: ${selected.length}${request.backgroundDuplicate ? ' + 1 фоновый дубль' : ''}. Схема: ${plan.template}, seed: ${plan.seed}. Повороты по часовой стрелке: ${placements.filter(p => p.role !== 'background').map(p => p.asset.name + ' ' + p.rotation + '°').join(', ')}.${plan.quality?.warnings.length?' '+plan.quality.warnings.join(' '):''}` });
+      message: `Предметов: ${selected.length}${duplicate ? ' + 1 фоновый дубль' : ''}. ${interpretation?'План ИИ':'Схема: '+plan.template}, seed: ${plan.seed}. Повороты по часовой стрелке: ${placements.filter(p => p.role !== 'background').map(p => p.asset.name + ' ' + p.rotation + '°').join(', ')}.${plan.quality?.warnings.length?' '+plan.quality.warnings.join(' '):''}` });
   } catch (error) {
     if (frame && !frame.removed) frame.remove();
-    console.error('Ochen Composer:', error);
     figma.ui.postMessage({ type: 'error', message: error instanceof Error ? error.message : 'Не удалось создать композицию.' });
   } finally {
     busy = false;

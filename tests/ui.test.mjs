@@ -7,7 +7,7 @@ import {paletteLibrary} from './palette-fixture.mjs';
 function panel() {
   const makeElement=()=>({value:'',dataset:{},style:{},disabled:false,checked:true,children:[],replaceChildren(){this.children=[];},appendChild(child){this.children.push(child);}});
   const elements = Object.fromEntries(['compose','variant','query','format','size','template','seed','status','catalog','background-duplicate','state-main','state-background','selected-asset','state-mode','scene-name','add-name','add-state','add','move-left','move-right','move-up','move-down','edit-angle','rotate','duplicate','delete','raise','lower','tab-build','tab-edit','build-panel','edit-panel','tab-palette','palette-panel','choose-palette','palette-select','palette-swatches','palette-warnings','palette-target','palette-example','palette-file','apply-palette','build-palette-name','scene-palette-name']
-    .concat(['tab-export','export-panel','export-target','export-svg','export-info','export-download']).map(id=>[id,makeElement()]));
+    .concat(['tab-export','export-panel','export-target','export-svg','export-info','export-download','input-mode','ai-disclosure','ai-result','ai-key','ai-model','ai-remember','ai-key-status','ai-save','ai-test','ai-delete','ai-feedback','names-notes']).map(id=>[id,makeElement()]));
   Object.assign(elements.query,{value:'Книга, телефон, монета'});
   elements.format.value='portrait';elements.size.value='small';elements.template.value='auto';elements.seed.value='0';
   elements['state-mode'].value='color';
@@ -27,6 +27,27 @@ test('SVG export targets the selected composition and disables while preparing',
  receive({type:'asset-selection',selected:null,scene:{id:'scene-export',name:'Scene',count:2}});
  elements['export-svg'].onclick();assert.equal(messages.at(-1).type,'export-svg');assert.equal(messages.at(-1).sceneId,'scene-export');assert.equal(elements['export-svg'].disabled,true);
  receive({type:'busy',value:false});receive({type:'asset-selection',selected:null,scene:null});assert.equal(elements['export-svg'].disabled,true);
+});
+
+test('Metaphor UI requires a personal key and sends only its explicit generation mode',()=>{
+ const {elements:e,messages,receive}=panel();e['input-mode'].value='metaphor';e['input-mode'].onchange();assert.equal(e.compose.disabled,true);
+ e['ai-key'].value='test-secret-key';e['ai-model'].value='openrouter/free';e['ai-remember'].checked=false;e['ai-save'].onclick();
+ assert.equal(messages.at(-1).type,'ai-configure');assert.equal(e['ai-key'].value,'');
+ receive({type:'ai-settings',hasKey:true,model:'openrouter/free',remember:false});receive({type:'busy',value:false});
+ e.query.value='Знания открывают возможности';e.compose.onclick();assert.equal(messages.at(-1).type,'compose-metaphor');assert.ok(!JSON.stringify(messages.at(-1)).includes('secret'));
+ receive({type:'busy',value:false});e.variant.onclick();assert.equal(messages.at(-1).type,'compose-metaphor');assert.equal(messages.at(-1).seed,1);assert.equal(e.template.disabled,true);assert.equal(e['background-duplicate'].disabled,true);
+ receive({type:'ai-result',explanation:'Обучение',names:['Книга'],model:'test'});assert.ok(e['ai-result'].textContent.includes('Книга'));
+});
+
+test('Check key accepts an unsaved draft and shows progress and result beside its button',()=>{
+ const {elements:e,messages,receive}=panel();e['ai-key'].value='draft-secret';e['ai-model'].value='openrouter/free';e['ai-key'].oninput();
+ assert.equal(e['ai-test'].disabled,false);e['ai-test'].onclick();
+ assert.equal(messages.at(-1).type,'ai-test');assert.equal(messages.at(-1).key,'draft-secret');
+ assert.ok(e['ai-feedback'].textContent.includes('Проверяем'));assert.equal(e['ai-test'].textContent,'Проверяем…');assert.equal(e['ai-key'].value,'');
+ receive({type:'error',message:'Неверный ключ.'});receive({type:'busy',value:false});
+ assert.equal(e['ai-feedback'].textContent,'Неверный ключ.');assert.equal(e['ai-test'].textContent,'Проверить ключ');
+ receive({type:'ai-settings',hasKey:true,model:'openrouter/free',remember:false});e['ai-test'].onclick();
+ receive({type:'success',message:'Ключ принят.'});receive({type:'busy',value:false});assert.equal(e['ai-feedback'].textContent,'Ключ принят.');
 });
 
 test('New variant increments seed; normal build reproduces it with the same query',()=>{
