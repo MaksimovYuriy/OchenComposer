@@ -4,10 +4,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 function panel() {
-  const elements = Object.fromEntries(['compose','variant','query','format','size','template','seed','status','catalog','background-duplicate','state-main','state-background','selected-asset']
+  const elements = Object.fromEntries(['compose','variant','query','format','size','template','seed','status','catalog','background-duplicate','state-main','state-background','selected-asset','state-mode']
     .map(id=>[id,{value:'',dataset:{},disabled:false,checked:true}]));
   Object.assign(elements.query,{value:'Книга, телефон, монета'});
   elements.format.value='portrait';elements.size.value='small';elements.template.value='auto';elements.seed.value='0';
+  elements['state-mode'].value='color';
   const messages=[];
   const window={};
   const context=vm.createContext({document:{getElementById:id=>elements[id]},window,parent:{postMessage:message=>messages.push(message.pluginMessage)}});

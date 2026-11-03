@@ -5,7 +5,7 @@
 *{box-sizing:border-box}body{margin:0;padding:24px;font:12px/1.5 Inter,system-ui,sans-serif;color:var(--figma-color-text,#222);background:var(--figma-color-bg,#fff)}h1{font-size:24px;letter-spacing:-.8px;margin:0 0 6px}p{color:var(--figma-color-text-secondary,#777)}label{display:block;margin:18px 0 6px;font-weight:600}textarea,select,button{font:inherit;border-radius:7px;border:1px solid var(--figma-color-border,#ddd);padding:10px;color:inherit;background:var(--figma-color-bg,#fff)}textarea{width:100%;resize:vertical;min-height:90px}select{width:100%}.row{display:flex;gap:12px}.row>div{flex:1}button{width:100%;margin-top:20px;background:#6654e8;border-color:#6654e8;color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}#status{margin-top:16px;overflow-wrap:anywhere}#status[data-error=true]{color:var(--figma-color-text-danger,#c33)}.tag{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--figma-color-text-secondary,#777);margin-bottom:8px}
 </style>
 <body>
-<div class="tag">Итерация 3A · размеры и состояния</div>
+<div class="tag">Итерация 3B · автоматическая компоновка</div>
 <h1>Ochen Composer</h1>
 <p>Введите названия предметов — плагин разместит их в новом фрейме.</p>
 <label for="query">Что должно быть в композиции</label>
@@ -14,8 +14,11 @@
 <div class="row"><div><label for="format">Формат</label><select id="format"><option value="square">1000 × 1000</option><option value="landscape">1200 × 630</option><option value="portrait">800 × 1200</option></select></div><div><label for="size">Графика</label><select id="size"><option value="large">L — large</option><option value="small">S — small</option></select></div></div>
 <div class="row"><div><label for="template">Схема</label><select id="template"><option value="auto">Автоматически</option><option value="diagonal">Диагональ</option><option value="focus">Главный и акценты</option><option value="terrace">Верхний план</option></select></div><div><label for="seed">Seed</label><input id="seed" type="number" min="0" max="2147483647" step="1" value="0" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:7px"></div></div>
 <p>Первый предмет задаёт фокус композиции. Относительные размеры берутся из исходников; масштаб всей сцены общий.</p>
+<label for="state-mode">Состояния при сборке</label>
+<select id="state-mode"><option value="color">Цветные предметы</option><option value="mixed">Смешанные: часть акцентов монохромные</option><option value="mono">Все предметы монохромные</option></select>
+<p>Повороты подбираются автоматически. Для лампы и цветов сохраняется исходное положение; остальные предметы допускают небольшие углы.</p>
 <label style="font-weight:400"><input type="checkbox" id="background-duplicate" checked> Добавить фоновый дубль главного предмета</label>
-<p>Это дополнительная монохромная копия позади предметов. Новые предметы не добавляются.</p>
+<p>Это дополнительная монохромная копия позади предметов. Для сцены без монохромных предметов выберите «Цветные» и отключите дубль.</p>
 <div class="row"><div><button id="compose" disabled>Собрать</button></div><div><button id="variant" disabled>Новый вариант</button></div></div>
 <div id="status" role="status" aria-live="polite">Подготовка библиотеки…</div>
 <hr style="margin-top:20px;border:0;border-top:1px solid #ddd">
@@ -33,7 +36,7 @@ let selectedAsset=null;
 function send(message){parent.postMessage({pluginMessage:message},'*')}
 function update(){const disabled=!ready||busy||!el('query').value.trim();el('compose').disabled=disabled;el('variant').disabled=disabled;el('state-main').disabled=busy||!selectedAsset||selectedAsset.state==='main';el('state-background').disabled=busy||!selectedAsset||selectedAsset.state==='background'}
 el('query').oninput=update;
-function compose(next){let seed=Number(el('seed').value);if(!el('seed').value.trim()||!Number.isInteger(seed)||seed<0||seed>2147483647){el('status').textContent='Seed: целое число от 0 до 2147483647.';el('status').dataset.error='true';return}if(next)seed=seed===2147483647?0:seed+1;el('seed').value=String(seed);busy=true;update();el('status').textContent='Собираем композицию…';el('status').dataset.error='false';send({type:'compose',text:el('query').value,format:el('format').value,size:el('size').value,backgroundDuplicate:el('background-duplicate').checked,template:el('template').value,seed})}
+function compose(next){let seed=Number(el('seed').value);if(!el('seed').value.trim()||!Number.isInteger(seed)||seed<0||seed>2147483647){el('status').textContent='Seed: целое число от 0 до 2147483647.';el('status').dataset.error='true';return}if(next)seed=seed===2147483647?0:seed+1;el('seed').value=String(seed);busy=true;update();el('status').textContent='Собираем композицию…';el('status').dataset.error='false';send({type:'compose',text:el('query').value,format:el('format').value,size:el('size').value,backgroundDuplicate:el('background-duplicate').checked,template:el('template').value,seed,stateMode:el('state-mode').value})}
 el('compose').onclick=()=>compose(false);
 el('variant').onclick=()=>compose(true);
 function setState(state){busy=true;update();send({type:'set-state',state})}

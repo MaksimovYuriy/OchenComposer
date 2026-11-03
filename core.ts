@@ -1,28 +1,43 @@
 type Asset = {
   id: string; name: string; role: 'main' | 'background'; size: 'large' | 'small';
   source: string; width: number; height: number; svg: string;
+  rotationAngles?: number[];
 };
 type Placement = { asset: Asset; x: number; y: number; scale: number };
 type Backdrop = { size: 'large' | 'small'; svg: string; width: number; height: number };
-type ScenePlacement = Placement & { role: 'main' | 'support' | 'background'; order: number };
+type Matrix = [[number, number, number], [number, number, number]];
+type Bounds = { x: number; y: number; width: number; height: number };
+type ScenePlacement = Placement & { role: 'main' | 'support' | 'background'; order: number;
+  rotation: number; pivot: { x: number; y: number }; transform: Matrix; bounds: Bounds };
+type StateMode = 'color' | 'mixed' | 'mono';
 type TemplateId = 'diagonal' | 'focus' | 'terrace';
 type ScenePlan = { template: TemplateId; seed: number; placements: ScenePlacement[] };
 type Zone = { x: number; y: number; w: number; h: number };
 
 function composeScene(assets: Asset[], backgrounds: Asset[], duplicate: boolean,
-  width: number, height: number, template: string, seed: number): ScenePlan {
+  width: number, height: number, template: string, seed: number, stateMode: StateMode = 'color'): ScenePlan {
   if (!assets.length || assets.length > 8) throw new Error('Допустимо от 1 до 8 предметов.');
   if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647) throw new Error('Seed: целое число от 0 до 2147483647.');
+  if (!['color', 'mixed', 'mono'].includes(stateMode)) throw new Error('Неизвестный режим состояний.');
   if (![width, height].every(v => Number.isFinite(v) && v >= 300 && v <= 2000)) throw new Error('Недопустимый размер холста.');
   const templates: TemplateId[] = ['diagonal', 'focus', 'terrace'];
   if (template !== 'auto' && !templates.includes(template as TemplateId)) throw new Error('Неизвестная схема композиции.');
   const chosen = template === 'auto' ? templates[seed % 3] : template as TemplateId;
   let state = (seed + 1) >>> 0;
   const random = () => { state = (Math.imul(1664525, state) + 1013904223) >>> 0; return state / 4294967296; };
-  const pending: { asset: Asset; role: ScenePlacement['role']; zone: Zone }[] = [];
+  const pending: { asset: Asset; role: ScenePlacement['role']; zone: Zone; rotation: number }[] = [];
   function fit(asset: Asset, role: ScenePlacement['role'], zone: Zone): void {
     if (![asset.width, asset.height].every(v => Number.isFinite(v) && v > 0)) throw new Error('Некорректные размеры предмета.');
-    pending.push({ asset, role, zone });
+    const angles = asset.rotationAngles || [0];
+    if (!angles.length || angles.some(angle => !Number.isFinite(angle) || Math.abs(angle) > 15)) throw new Error('Недопустимая политика углов.');
+    const rotation = angles[(seed + pending.length + templates.indexOf(chosen)) % angles.length];
+    const monochrome = role !== 'background' && (stateMode === 'mono' || (stateMode === 'mixed' && role === 'support' && pending.filter(p => p.role === 'support').length % 2 === 0));
+    if (monochrome) {
+      const variant = backgrounds.find(a => a.id === asset.id && a.size === asset.size);
+      if (!variant || variant.width !== asset.width || variant.height !== asset.height) throw new Error('Не найден совместимый монохромный исходник.');
+      asset = variant;
+    }
+    pending.push({ asset, role, zone, rotation });
   }
   if (duplicate) {
     const background = backgrounds.find(a => a.id === assets[0].id && a.size === assets[0].size);
@@ -78,18 +93,40 @@ function composeScene(assets: Asset[], backgrounds: Asset[], duplicate: boolean,
   assets.slice(1).forEach((asset, index) => fit(asset, 'support', supports[index]));
   // Exported at 1x from the original library (confirmed by the owner).
   // Preserve relative dimensions: one scale for every foreground and background instance.
-  const scale = Math.min(...pending.filter(p => p.role !== 'background').map(({asset,zone}) => Math.min(zone.w * width / asset.width, zone.h * height / asset.height)))
+  const scale = Math.min(...pending.filter(p => p.role !== 'background').map(({asset,zone,rotation}) => {
+    const bounds = rotatedSize(asset.width, asset.height, rotation);
+    return Math.min(zone.w * width / bounds.width, zone.h * height / bounds.height);
+  }))
     * (.92 + random() * .06);
-  const placements = pending.map(({asset,role,zone},order) => {
-    const remainingW = zone.w * width - asset.width * scale;
-    const remainingH = zone.h * height - asset.height * scale;
-    const x = zone.x * width + remainingW * (.35 + random() * .30);
-    const y = zone.y * height + remainingH * (.35 + random() * .30);
-    return { asset, role, order, scale,
-      x: Math.max(0, Math.min(width - asset.width * scale, x)),
-      y: Math.max(0, Math.min(height - asset.height * scale, y)) };
+  const placements = pending.map(({asset,role,zone,rotation},order) => {
+    const size = rotatedSize(asset.width * scale, asset.height * scale, rotation);
+    const remainingW = zone.w * width - size.width;
+    const remainingH = zone.h * height - size.height;
+    const left = Math.max(0, Math.min(width - size.width, zone.x * width + remainingW * (.35 + random() * .30)));
+    const top = Math.max(0, Math.min(height - size.height, zone.y * height + remainingH * (.35 + random() * .30)));
+    const transform = centeredTransform(asset.width * scale, asset.height * scale, rotation, left + size.width / 2, top + size.height / 2);
+    return { asset, role, order, scale, rotation, pivot: { x: asset.width / 2, y: asset.height / 2 }, transform,
+      x: transform[0][2], y: transform[1][2], bounds: { x: left, y: top, ...size } };
   });
-  return { template: chosen, seed, placements };
+  // Background duplicates may overlap, but must also remain inside the canvas.
+  if (placements.some(p => p.bounds.width > width + .001 || p.bounds.height > height + .001)) {
+    throw new Error('Набор не помещается с выбранными поворотами. Измените формат или вариант.');
+  }
+  // Monochrome instances are behind colored instances; keep semantic roles separate.
+  placements.sort((a, b) => Number(a.asset.role !== 'background') - Number(b.asset.role !== 'background'));
+  return { template: chosen, seed, placements: placements.map((placement, order) => ({ ...placement, order })) };
+}
+
+function rotatedSize(width: number, height: number, angle: number): { width: number; height: number } {
+  const radians = angle * Math.PI / 180;
+  const c = Math.abs(Math.cos(radians)), s = Math.abs(Math.sin(radians));
+  return { width: c * width + s * height, height: s * width + c * height };
+}
+
+function centeredTransform(width: number, height: number, angle: number, cx: number, cy: number): Matrix {
+  const radians = angle * Math.PI / 180;
+  const c = Math.cos(radians), s = Math.sin(radians);
+  return [[c, -s, cx - c * width / 2 + s * height / 2], [s, c, cy - s * width / 2 - c * height / 2]];
 }
 
 function stateReplacementScale(source: Asset, target: Asset, width: number, height: number): number {

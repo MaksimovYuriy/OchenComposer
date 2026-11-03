@@ -67,3 +67,14 @@ test('Selecting a detail resolves its owning asset; unrelated nodes are rejected
   assert.equal(s.messages.at(-2).type,'busy');
   assert.ok(s.messages.some(m=>m.type==='error'));
 });
+
+test('Non-right-angle matrices survive state replacement without a position or rotation reset',()=>{
+  const s=session(),angle=8*Math.PI/180;
+  s.source.relativeTransform=[[Math.cos(angle),-Math.sin(angle),123.45],[Math.sin(angle),Math.cos(angle),456.78]];
+  const matrix=JSON.stringify(s.source.relativeTransform);
+  for(const state of ['background','main']){
+    s.figma.ui.onmessage({type:'set-state',state});
+    assert.equal(JSON.stringify(s.figma.currentPage.selection[0].relativeTransform),matrix);
+    assert.equal(s.frame.children.length,2);
+  }
+});

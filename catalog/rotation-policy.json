@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "description": "Small clockwise canvas angles; preserve the source isometry and existing shadows. Zero remains valid.",
+  "angles": {
+    "book": [-6, 0, 6],
+    "phone": [-8, 0, 8],
+    "coin": [-12, 0, 12],
+    "puzzle": [-10, 0, 10],
+    "flowers": [0],
+    "pen": [-12, 0, 12],
+    "folder": [-6, 0, 6],
+    "headphones": [-6, 0, 6],
+    "lamp": [0],
+    "wallet": [-8, 0, 8]
+  }
+}

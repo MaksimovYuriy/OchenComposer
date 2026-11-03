@@ -9,6 +9,7 @@ const names = {
   'Лампа': 'lamp', 'Кошелек': 'wallet',
 };
 const assets = [];
+const rotationPolicy = JSON.parse(await readFile(new URL('../catalog/rotation-policy.json', import.meta.url), 'utf8'));
 for (const [folder, role] of [['mainground', 'main'], ['background', 'background']]) {
   for (const size of ['large', 'small']) {
     const directory = `assets/${folder}/${size}`;
@@ -29,7 +30,10 @@ for (const [folder, role] of [['mainground', 'main'], ['background', 'background
       for (const match of svg.matchAll(/url\(#([^\)]+)\)/g)) {
         if (!ids.has(match[1])) throw new Error(`Не найден #${match[1]}: ${source}`);
       }
-      assets.push({ id: names[name], name, role, size, source, width: box[2], height: box[3], svg });
+      const rotationAngles = rotationPolicy.angles[names[name]];
+      if (!Array.isArray(rotationAngles) || !rotationAngles.length || !rotationAngles.includes(0)
+        || rotationAngles.some(angle => !Number.isFinite(angle) || Math.abs(angle) > 15)) throw new Error(`Некорректная политика углов: ${name}`);
+      assets.push({ id: names[name], name, role, size, source, width: box[2], height: box[3], rotationAngles, svg });
     }
   }
 }

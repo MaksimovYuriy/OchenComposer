@@ -97,10 +97,12 @@ figma.ui.onmessage = (message: unknown) => {
     const [width, height] = formats[request.format];
     const candidates = ASSETS.filter(asset => asset.role === 'main' && asset.size === request.size);
     const selected = resolveNames(request.text, candidates);
+    const stateMode = request.stateMode === undefined ? 'color' : request.stateMode;
+    if (stateMode !== 'color' && stateMode !== 'mixed' && stateMode !== 'mono') throw new Error('Выберите режим состояний предметов.');
     if (typeof request.backgroundDuplicate !== 'boolean') throw new Error('Некорректная настройка фона.');
     if (typeof request.template !== 'string' || typeof request.seed !== 'number') throw new Error('Выберите схему и seed.');
     const plan = composeScene(selected, ASSETS.filter(a => a.role === 'background'), request.backgroundDuplicate,
-      width, height, request.template, request.seed);
+      width, height, request.template, request.seed, stateMode);
     const placements = plan.placements;
     frame = figma.createFrame();
     frame.name = `Ochen — ${selected.map(asset => asset.name).join(', ')} · ${plan.template} #${plan.seed}`;
@@ -115,8 +117,10 @@ figma.ui.onmessage = (message: unknown) => {
     frame.setPluginData('ochen-composition', '1');
     frame.setPluginData('ochen-template', plan.template);
     frame.setPluginData('ochen-seed', String(plan.seed));
-    frame.setPluginData('ochen-plan', JSON.stringify({ version: 1, ids: selected.map(a => a.id), size: request.size,
-      width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: request.backgroundDuplicate }));
+    frame.setPluginData('ochen-plan', JSON.stringify({ version: 2, ids: selected.map(a => a.id), size: request.size,
+      width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: request.backgroundDuplicate, stateMode,
+      placements: placements.map(p => ({ id: p.asset.id, state: p.asset.role, role: p.role, rotation: p.rotation,
+        pivot: p.pivot, scale: p.scale, transform: p.transform, order: p.order })) }));
     {
       const backdrop = BACKDROPS.find(a => a.size === request.size);
       if (!backdrop) throw new Error('Не найден исходный фон.');
@@ -147,20 +151,21 @@ figma.ui.onmessage = (message: unknown) => {
       const node = figma.createNodeFromSvg(placement.asset.svg);
       // Attach immediately so a failure only removes this incomplete result.
       frame.appendChild(node);
-      node.name = placement.role === 'background' ? `Фоновый дубль — ${placement.asset.name}` : placement.asset.name;
+      node.name = placement.role === 'background' ? `Фоновый дубль — ${placement.asset.name}`
+        : `${placement.asset.name}${placement.asset.role === 'background' ? ' — монохромный' : ''}`;
       node.setPluginData('ochen-asset-id', placement.asset.id);
       node.setPluginData('ochen-variant', placement.asset.size);
       node.setPluginData('ochen-role', placement.role);
       node.setPluginData('ochen-state', placement.asset.role);
+      node.setPluginData('ochen-generated-rotation', String(placement.rotation));
       node.rescale(placement.scale);
-      node.x = placement.x;
-      node.y = placement.y;
+      node.relativeTransform = placement.transform;
     }
     figma.currentPage.selection = [frame];
     figma.viewport.scrollAndZoomIntoView([frame]);
     previousResult = frame;
     figma.ui.postMessage({ type: 'success', seed: plan.seed, template: plan.template,
-      message: `Предметов: ${selected.length}${request.backgroundDuplicate ? ' + 1 фоновый дубль' : ''}. Главный: ${selected[0].name}. Схема: ${plan.template}, seed: ${plan.seed}.` });
+      message: `Предметов: ${selected.length}${request.backgroundDuplicate ? ' + 1 фоновый дубль' : ''}. Схема: ${plan.template}, seed: ${plan.seed}. Повороты по часовой стрелке: ${placements.filter(p => p.role !== 'background').map(p => p.asset.name + ' ' + p.rotation + '°').join(', ')}.` });
   } catch (error) {
     if (frame && !frame.removed) frame.remove();
     console.error('Ochen Composer:', error);
