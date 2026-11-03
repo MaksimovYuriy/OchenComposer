@@ -109,6 +109,7 @@ test('All templates preserve real foreground membership, bounds and separation i
             for (let count = 1; count <= 8; count++) {
               const selected = Array.from({ length: count }, (_, i) => main[(start+i)%main.length]);
               const plan = context.composeScene(selected, background, true, width, height, template, seed);
+              if(template!=='auto')assert.equal(plan.template,template,'An explicit style remains selected');
               const foreground = plan.placements.filter(p => p.role !== 'background');
               assert.equal(new Set(plan.placements.map(p=>p.scale)).size,1,'Every original and duplicate must use the same scene scale');
               assert.deepEqual(Array.from(foreground,p=>p.asset.id),selected.map(a=>a.id));
@@ -136,10 +137,43 @@ test('Seed reproduces the scene; next variants change the layout without changin
   const main=realAssets('mainground','main','large').slice(0,3);
   const make=(seed,template='auto')=>context.composeScene(main,[],false,1200,630,template,seed);
   assert.equal(JSON.stringify(make(17)),JSON.stringify(make(17)));
-  assert.equal(new Set([0,1,2].map(seed=>make(seed).template)).size,3);
+  assert.equal(new Set([0,1,2].map(seed=>JSON.stringify(make(seed).placements))).size,3,'Seed varies geometry; automatic template is selected by quality');
   for(const template of ['diagonal','focus','terrace'])assert.notEqual(JSON.stringify(make(0,template)),JSON.stringify(make(1,template)));
   for(const seed of [-1,NaN,1.5,2147483648])assert.throws(()=>make(seed));
   assert.throws(()=>make(0,'unknown'));
+});
+
+test('Quality search improves a varied acceptance corpus without changing the requested objects or scale ratios',()=>{
+ let improved=0;
+ for(const size of ['large','small']){
+  const main=realAssets('mainground','main',size),background=realAssets('background','background',size);
+  const sets=[['book'],['phone','puzzle'],['book','phone','coin'],['lamp','book','flowers'],['folder','wallet','coin'],['headphones','flowers'],['book','book','coin'],names.slice(0,6),names.slice(0,8)];
+  for(const ids of sets)for(const [w,h] of [[1000,1000],[1200,630],[800,1200]])for(const mode of ['color','mixed','mono']){
+   const selected=ids.map(id=>main.find(a=>a.id===id));
+   const original=context.composeZonedScene(selected,background,true,w,h,'auto',0,mode);
+   const result=context.composeScene(selected,background,true,w,h,'auto',0,mode);
+   const baseline=context.compositionQuality(original,w,h);
+   assert.ok(result.quality.score>=baseline.score-1e-8);
+   if(result.quality.score>baseline.score+3)improved++;
+   assert.equal(result.quality.version,'composition-v2');assert.ok(result.quality.candidates>1);
+   assert.deepEqual(Array.from(result.placements.filter(p=>p.role!=='background'),p=>p.asset.id).sort(),[...ids].sort());
+   assert.equal(new Set(result.placements.map(p=>p.scale)).size,1);
+   for(const p of result.placements){const b=bounds(p);assert.ok(b.x>=-.001&&b.y>=-.001&&b.x+b.width<=w+.001&&b.y+b.height<=h+.001,'Including the background duplicate');}
+   assert.ok(result.quality.balance<.25,'Avoid a visually stranded cluster');
+  }
+ }
+ assert.ok(improved>100,'Improvement must cover many sets, not one demonstration');
+});
+
+test('Sparse mixed-size recipe becomes larger while keeping source objects unchanged',()=>{
+ const main=realAssets('mainground','main','large'),background=realAssets('background','background','large');
+ const selected=['lamp','book','flowers'].map(id=>main.find(a=>a.id===id));
+ const original=JSON.stringify(selected);
+ const old=context.composeZonedScene(selected,background,true,1000,1000,'auto',0);
+ const result=context.composeScene(selected,background,true,1000,1000,'auto',0);
+ assert.ok(result.placements[0].scale>old.placements[0].scale*1.15,'A narrow slot must no longer shrink the entire scene');
+ assert.equal(JSON.stringify(selected),original);
+ for(const p of result.placements)assert.ok([...selected,...background].includes(p.asset),'Reuse original sources');
 });
 
 test('State replacement preserves local size and rejects unknown proportions or mismatched variants',()=>{

@@ -187,7 +187,7 @@ figma.ui.onmessage = async (message: unknown) => {
     frame.setPluginData('ochen-detail', request.size);
     frame.setPluginData('ochen-palette',JSON.stringify(palette));
     frame.setPluginData('ochen-plan', JSON.stringify({ version: 2, ids: selected.map(a => a.id), size: request.size,
-      width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: request.backgroundDuplicate, stateMode, palette,
+      width, height, template: plan.template, seed: plan.seed, backgroundDuplicate: request.backgroundDuplicate, stateMode, palette, quality:plan.quality,
       placements: placements.map(p => ({ id: p.asset.id, state: p.asset.role, role: p.role, rotation: p.rotation,
         pivot: p.pivot, scale: p.scale, transform: p.transform, order: p.order })) }));
     {
@@ -239,7 +239,7 @@ figma.ui.onmessage = async (message: unknown) => {
     trackedScene = frame;
     syncCurrentScene(frame);
     figma.ui.postMessage({ type: 'success', seed: plan.seed, template: plan.template,
-      message: `Предметов: ${selected.length}${request.backgroundDuplicate ? ' + 1 фоновый дубль' : ''}. Схема: ${plan.template}, seed: ${plan.seed}. Повороты по часовой стрелке: ${placements.filter(p => p.role !== 'background').map(p => p.asset.name + ' ' + p.rotation + '°').join(', ')}.` });
+      message: `Предметов: ${selected.length}${request.backgroundDuplicate ? ' + 1 фоновый дубль' : ''}. Схема: ${plan.template}, seed: ${plan.seed}. Повороты по часовой стрелке: ${placements.filter(p => p.role !== 'background').map(p => p.asset.name + ' ' + p.rotation + '°').join(', ')}.${plan.quality?.warnings.length?' '+plan.quality.warnings.join(' '):''}` });
   } catch (error) {
     if (frame && !frame.removed) frame.remove();
     console.error('Ochen Composer:', error);
